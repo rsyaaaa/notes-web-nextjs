@@ -44,6 +44,7 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(supabaseConfigReady)
   const [notes, setNotes] = useState<Note[]>([])
+  const [notePeopleById, setNotePeopleById] = useState<Record<number, NotePerson[]>>({})
   const [activeTab, setActiveTab] = useState<'notes' | 'trash'>('notes')
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [isPremiumOfferOpen, setIsPremiumOfferOpen] = useState(false)
@@ -148,7 +149,62 @@ export default function Home() {
     if (error) {
       console.error('Error fetching notes:', error.message)
     } else {
-      setNotes(data || [])
+      const visibleNotes = data || []
+      setNotes(visibleNotes)
+
+      if (visibleNotes.length === 0) {
+        setNotePeopleById({})
+        return
+      }
+
+      const { data: allMemberships, error: allMembershipsError } = await supabase
+        .from('note_members')
+        .select('note_id, user_id, invited_by')
+        .in('note_id', visibleNotes.map((note) => note.id))
+
+      if (allMembershipsError) {
+        console.error('Error fetching note collaborators:', allMembershipsError.message)
+        setNotePeopleById({})
+        return
+      }
+
+      const memberRows = allMemberships ?? []
+      const profileIds = [...new Set(visibleNotes.flatMap((note) => [
+        note.user_id,
+        ...memberRows
+          .filter((member) => member.note_id === note.id)
+          .flatMap((member) => [member.user_id, member.invited_by]),
+      ]))]
+      const { data: people, error: peopleError } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', profileIds)
+
+      if (peopleError) {
+        console.error('Error fetching note collaborator profiles:', peopleError.message)
+        setNotePeopleById({})
+        return
+      }
+
+      const peopleById = new Map((people ?? []).map((person) => [person.id, person]))
+      const peopleByNote: Record<number, NotePerson[]> = {}
+      for (const note of visibleNotes) {
+        const noteMemberIds = [...new Set([
+          note.user_id,
+          ...memberRows
+            .filter((member) => member.note_id === note.id)
+            .flatMap((member) => [member.user_id, member.invited_by]),
+        ])]
+        peopleByNote[note.id] = noteMemberIds.flatMap((memberId) => {
+          const person = peopleById.get(memberId)
+          return person ? [{
+            user_id: person.id,
+            full_name: person.full_name,
+            avatar_url: person.avatar_url,
+          }] : []
+        })
+      }
+      setNotePeopleById(peopleByNote)
     }
   }
 
@@ -254,6 +310,7 @@ export default function Home() {
         fetchFolders(currentUser.id)
       } else {
         setNotes([])
+        setNotePeopleById({})
         setProfile(null)
         setFolders([])
         setLastOfferUserId(null)
@@ -1401,7 +1458,30 @@ export default function Home() {
                             Buang
                           </button>
                         ) : (
-                          <span className="px-2 text-[12px] text-[#7a7a7a]">Dibagikan</span>
+                          <div className="flex min-h-11 items-center gap-2 px-2">
+                            <span className="text-[12px] text-[#7a7a7a]">Dibagikan</span>
+                            <div
+                              className="flex items-center pl-1"
+                              aria-label={`Dibagikan oleh ${notePeopleById[note.id]?.map((person) => person.full_name || 'pengguna').join(', ') || 'pemilik catatan'}`}
+                            >
+                              {(notePeopleById[note.id] ?? []).slice(0, 4).map((person) => (
+                                <span
+                                  key={person.user_id}
+                                  title={person.full_name || 'Pengguna note'}
+                                  className="-ml-1 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#f5f5f7] text-[10px] text-[#1d1d1f] first:ml-0"
+                                >
+                                  {person.avatar_url
+                                    ? <Image src={person.avatar_url} alt={person.full_name || 'Foto profil'} width={28} height={28} unoptimized className="h-full w-full object-cover" />
+                                    : (person.full_name || '?').slice(0, 1).toUpperCase()}
+                                </span>
+                              ))}
+                              {(notePeopleById[note.id]?.length ?? 0) > 4 && (
+                                <span className="-ml-1 flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-white bg-[#f5f5f7] px-1 text-[9px] text-[#1d1d1f]">
+                                  +{(notePeopleById[note.id]?.length ?? 0) - 4}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
