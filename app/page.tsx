@@ -79,6 +79,7 @@ export default function Home() {
   const [sharingMessage, setSharingMessage] = useState('')
   const currentDraftRef = useRef<NoteDraft>({ title: '', content: '', accentColor: '#ffffff', folderId: '' })
   const savedDraftRef = useRef<NoteDraft>({ title: '', content: '', accentColor: '#ffffff', folderId: '' })
+  const noteTitleInputRef = useRef<HTMLInputElement>(null)
 
   // State Form Catatan Baru / Edit
   const [title, setTitle] = useState('')
@@ -338,9 +339,12 @@ export default function Home() {
     }
   }
 
-  const inviteCollaborator = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const inviteCollaborator = async () => {
     if (!user || !editingNoteId || !isPremium) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim())) {
+      setSharingMessage('Masukkan alamat email yang valid.')
+      return
+    }
     setSharingMessage('Mengirim undangan...')
     const { data, error } = await supabase.rpc('invite_note_collaborator', {
       target_note_id: editingNoteId,
@@ -510,6 +514,13 @@ export default function Home() {
 
     return () => window.clearTimeout(timeout)
   }, [accentColor, content, editingNoteId, isFormOpen, lastSavedDraft, selectedFolderId, title, user])
+
+  useEffect(() => {
+    if (isFormOpen && editingNoteId !== null) {
+      noteTitleInputRef.current?.setSelectionRange(0, 0)
+      noteTitleInputRef.current?.scrollTo({ left: 0 })
+    }
+  }, [editingNoteId, isFormOpen])
 
   useEffect(() => {
     if (!isFormOpen || editingNoteId === null || !user) {
@@ -736,11 +747,11 @@ export default function Home() {
   if (!user) {
     return (
       <main className={`min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans ${isDarkMode ? 'theme-dark' : ''}`}>
-        <header className="h-[44px] bg-black text-white flex items-center justify-between px-6 md:px-12 text-[12px] tracking-[-0.12px]">
+        <header className="flex h-[44px] items-center justify-between gap-3 bg-black px-4 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
           <span className="font-semibold text-sm"> Notes</span>
           <span>Catatan pribadimu</span>
         </header>
-        <div className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1120px] items-center justify-center gap-16 px-6 py-12 lg:justify-between">
+        <div className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1120px] items-center justify-center gap-16 px-4 py-8 sm:px-6 sm:py-12 lg:justify-between">
           <section className="hidden max-w-[470px] lg:block">
             <h1 className="text-[56px] font-semibold leading-[1.07] tracking-[-0.374px]">
               Ruang tenang untuk semua idemu.
@@ -750,7 +761,7 @@ export default function Home() {
             </p>
           </section>
 
-          <section className="w-full max-w-[420px] rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-8">
+          <section className="w-full max-w-[420px] rounded-[18px] border border-[#e0e0e0] bg-white p-5 sm:p-8">
             <h1 className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">
               {authMode === 'login' ? 'Selamat datang kembali' : 'Buat akun Notes'}
             </h1>
@@ -849,14 +860,14 @@ export default function Home() {
   return (
     <div className={`min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans flex flex-col selection:bg-[#0066cc] selection:text-white animate-dashboard-enter ${isDarkMode ? 'theme-dark' : ''}`}>
       {/* Global Thin Nav Bar */}
-      <header className="h-[44px] bg-[#000000] text-white flex items-center justify-between px-6 md:px-12 text-[12px] tracking-[-0.12px] sticky top-0 z-50">
-        <div className="flex items-center gap-2">
+      <header className="sticky top-0 z-50 flex h-[44px] items-center justify-between gap-2 bg-[#000000] px-3 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
           <span className="text-base"></span>
           <span className="font-semibold tracking-normal">Notes</span>
           <button
             type="button"
             onClick={openPlanDetails}
-            className={`ml-1 min-h-8 rounded-full px-2 text-[10px] tracking-normal transition-colors active:scale-95 ${isPremium ? 'bg-[#0066cc] text-white' : 'bg-white/10 text-white/80'}`}
+            className={`min-h-8 shrink-0 rounded-full px-2 text-[10px] tracking-normal transition-colors active:scale-95 ${isPremium ? 'bg-[#0066cc] text-white' : 'bg-white/10 text-white/80'}`}
           >
             {isPremium ? '★ Premium' : 'Free Plan'}
           </button>
@@ -869,7 +880,7 @@ export default function Home() {
             aria-expanded={isProfileMenuOpen}
             aria-haspopup="menu"
             onClick={() => setIsProfileMenuOpen((open) => !open)}
-            className="flex min-h-11 items-center gap-2 rounded-full px-2 text-white transition-colors hover:bg-white/10 active:scale-[0.98]"
+            className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-1.5 text-white transition-colors hover:bg-white/10 active:scale-[0.98] sm:gap-2 sm:px-2"
           >
             {(profile?.avatar_url || user.user_metadata?.avatar_url) ? (
               <Image
@@ -891,7 +902,7 @@ export default function Home() {
             <span aria-hidden="true" className="text-[10px]">⌄</span>
           </button>
           {isProfileMenuOpen && (
-            <div role="menu" className="absolute right-0 top-[calc(100%+8px)] z-[55] w-56 rounded-[8px] border border-[#e0e0e0] bg-white p-2 text-[#1d1d1f]">
+            <div role="menu" className="absolute right-0 top-[calc(100%+8px)] z-[55] w-[min(14rem,calc(100vw-1.5rem))] rounded-[8px] border border-[#e0e0e0] bg-white p-2 text-[#1d1d1f]">
               <div className="border-b border-[#f0f0f0] px-3 py-2">
                 <p className="truncate text-[14px] font-semibold">{profile?.full_name || 'Akun Notes'}</p>
                 <p className="truncate text-[12px] text-[#7a7a7a]">{user.email}</p>
@@ -934,15 +945,15 @@ export default function Home() {
       </header>
 
       {/* Sub-Nav Frosted Glass */}
-      <nav className="h-[52px] bg-[#f5f5f7]/80 backdrop-blur-md border-b border-[#e0e0e0] sticky top-[44px] z-40 flex items-center justify-between px-6 md:px-12">
-        <div className="flex items-center gap-6">
-          <span className="text-[21px] font-semibold tracking-[0.231px] text-[#1d1d1f]">
+      <nav className="sticky top-[44px] z-40 flex min-h-[52px] flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[#e0e0e0] bg-[#f5f5f7]/80 px-3 py-2 backdrop-blur-md sm:px-6 md:px-12">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-6">
+          <span className="text-[18px] font-semibold tracking-[0.1px] text-[#1d1d1f] sm:text-[21px] sm:tracking-[0.231px]">
             {activeTab === 'notes' ? 'Catatan Saya' : 'Sampah'}
           </span>
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-1 sm:gap-2">
             <button
               onClick={() => setActiveTab('notes')}
-              className={`text-[14px] px-3 py-1 rounded-full transition-all ${
+              className={`min-h-10 rounded-full px-2 text-[12px] transition-all sm:px-3 sm:text-[14px] ${
                 activeTab === 'notes' ? 'bg-[#1d1d1f] text-white' : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
               }`}
             >
@@ -950,7 +961,7 @@ export default function Home() {
             </button>
             <button
               onClick={() => setActiveTab('trash')}
-              className={`text-[14px] px-3 py-1 rounded-full transition-all ${
+              className={`min-h-10 rounded-full px-2 text-[12px] transition-all sm:px-3 sm:text-[14px] ${
                 activeTab === 'trash' ? 'bg-[#1d1d1f] text-white' : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
               }`}
             >
@@ -965,7 +976,7 @@ export default function Home() {
               if (isFormOpen) closeNoteForm()
               else openNewNote()
             }}
-            className="bg-[#0066cc] text-white text-[14px] font-normal px-4 py-2 rounded-full hover:bg-[#0071e3] active:scale-95 transition-all"
+            className="min-h-10 shrink-0 rounded-full bg-[#0066cc] px-3 text-[12px] font-normal text-white transition-all hover:bg-[#0071e3] active:scale-95 sm:px-4 sm:text-[14px]"
           >
             {isFormOpen ? 'Tutup Form' : '+ Catatan Baru'}
           </button>
@@ -973,7 +984,7 @@ export default function Home() {
       </nav>
 
       {/* Content Area */}
-      <main className="flex-1 max-w-[1440px] w-full mx-auto px-6 md:px-12 py-8">
+      <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 sm:py-8 md:px-12">
         {premiumMessage && (
           <div role="status" className="mb-5 flex items-center justify-between gap-4 rounded-[11px] border border-[#e0e0e0] bg-white px-4 py-3 text-[14px] text-[#1d1d1f]">
             <span>{premiumMessage}</span>
@@ -1018,7 +1029,7 @@ export default function Home() {
         {/* Note editor modal */}
         {isFormOpen && activeTab === 'notes' && (
           <div
-            className={`fixed inset-0 z-[60] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px] ${isFormClosing ? 'animate-modal-backdrop-exit' : 'animate-modal-backdrop'}`}
+            className={`fixed inset-0 z-[60] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] sm:p-4 ${isFormClosing ? 'animate-modal-backdrop-exit' : 'animate-modal-backdrop'}`}
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) closeNoteForm()
             }}
@@ -1030,13 +1041,24 @@ export default function Home() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="note-editor-title"
-              className={`w-full max-w-[680px] max-h-[min(82vh,760px)] overflow-y-auto p-6 sm:p-8 rounded-[18px] border border-[#e0e0e0] ${isFormClosing ? 'animate-modal-exit' : 'animate-modal-enter'}`}
+              className={`max-h-[90dvh] w-full max-w-[680px] overscroll-contain overflow-y-auto rounded-[18px] border border-[#e0e0e0] p-4 sm:max-h-[min(82vh,760px)] sm:p-8 ${isFormClosing ? 'animate-modal-exit' : 'animate-modal-enter'}`}
             >
-              <div className="mb-6 flex items-start justify-between gap-4">
-                <div>
-                  <h2 id="note-editor-title" className="text-[21px] leading-[1.2] font-semibold text-[#1d1d1f]">
-                    {editingNoteId ? 'Edit Catatan' : 'Buat Catatan Baru'}
-                  </h2>
+              <div className="mb-4 flex items-start justify-between gap-3 sm:mb-6 sm:gap-4">
+                <div className="min-w-0 flex-1">
+                  <input
+                    ref={noteTitleInputRef}
+                    id="note-editor-title"
+                    aria-label="Judul catatan"
+                    autoFocus={editingNoteId === null}
+                    type="text"
+                    placeholder={editingNoteId ? 'Tanpa Judul' : 'Buat Catatan Baru'}
+                    value={title}
+                    onChange={(event) => {
+                      setTitle(event.target.value)
+                      setSaveStatus('idle')
+                    }}
+                    className="w-full min-w-0 bg-transparent text-[21px] font-semibold leading-[1.2] text-[#1d1d1f] outline-none placeholder:text-[#7a7a7a] focus-visible:ring-2 focus-visible:ring-[#0071e3]"
+                  />
                   <p aria-live="polite" className="mt-2 min-h-5 text-[12px] text-[#7a7a7a]">
                     {saveStatus === 'saving' && 'Menyimpan...'}
                     {saveStatus === 'saved' && '✓ Autosave complete'}
@@ -1052,17 +1074,6 @@ export default function Home() {
                   ×
                 </button>
               </div>
-              <input
-                autoFocus
-                type="text"
-                placeholder="Judul Catatan..."
-                value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value)
-                  setSaveStatus('idle')
-                }}
-                className="w-full border-b border-[#e0e0e0] bg-transparent pb-3 mb-5 text-[21px] font-semibold text-[#1d1d1f] focus:outline-none"
-              />
               <textarea
                 placeholder="Tulis isi catatan di sini..."
                 value={content}
@@ -1071,7 +1082,7 @@ export default function Home() {
                   setSaveStatus('idle')
                 }}
                 rows={10}
-                className="mb-6 min-h-[240px] w-full resize-y bg-transparent text-[17px] leading-[1.47] text-[#1d1d1f] focus:outline-none"
+                className="mb-5 min-h-[180px] w-full resize-y bg-transparent text-[17px] leading-[1.47] text-[#1d1d1f] focus:outline-none sm:mb-6 sm:min-h-[240px]"
               />
               {(isPremium || notes.find((item) => item.id === editingNoteId)?.user_id !== user.id) && editingNoteId !== null && (
                 <section className="mb-6 border-t border-[#f0f0f0] pt-5" aria-label="Kolaborator catatan">
@@ -1096,7 +1107,7 @@ export default function Home() {
                     ))}
                   </div>
                   {notes.find((item) => item.id === editingNoteId)?.user_id === user.id && (
-                    <form onSubmit={inviteCollaborator} className="mt-4 flex flex-wrap gap-2">
+                    <div className="mt-4 flex flex-wrap gap-2">
                       <input
                         type="email"
                         required
@@ -1106,13 +1117,13 @@ export default function Home() {
                         onChange={(event) => setInviteEmail(event.target.value)}
                         className="h-11 min-w-0 flex-1 rounded-full border border-[#e0e0e0] bg-white px-4 text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
                       />
-                      <button className="min-h-11 rounded-full bg-[#0066cc] px-4 text-[14px] text-white active:scale-95">Undang</button>
-                    </form>
+                      <button type="button" onClick={inviteCollaborator} className="min-h-11 rounded-full bg-[#0066cc] px-4 text-[14px] text-white active:scale-95">Undang</button>
+                    </div>
                   )}
                   {sharingMessage && <p aria-live="polite" className="mt-2 text-[12px] text-[#7a7a7a]">{sharingMessage}</p>}
                 </section>
               )}
-              <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[#f0f0f0] pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4 sm:gap-4 sm:pt-5">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="text-[12px] text-[#7a7a7a]">Aksen warna</span>
                   {colorOptions.map((color) => (
@@ -1177,7 +1188,7 @@ export default function Home() {
                 <p className="text-[17px]">Klik &quot;+ Catatan Baru&quot; di atas untuk mulai menulis.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
                 {activeNotes.map((note) => (
                   <article
                     key={note.id}
@@ -1193,11 +1204,11 @@ export default function Home() {
                         handleEditClick(note)
                       }
                     }}
-                    className="relative group flex cursor-pointer flex-col justify-between rounded-[18px] border border-[#e0e0e0] p-6 transition-all duration-200 hover:border-[#0066cc]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0071e3]"
+                    className="relative group flex min-w-0 cursor-pointer flex-col justify-between rounded-[18px] border border-[#e0e0e0] p-5 transition-all duration-200 hover:border-[#0066cc]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0071e3] sm:p-6"
                   >
                     <div>
                       <div className="flex items-start justify-between mb-2 gap-2">
-                        <h3 className="text-[17px] font-semibold text-[#1d1d1f] tracking-[-0.374px] line-clamp-1">
+                        <h3 className="min-w-0 flex-1 truncate text-[17px] font-semibold text-[#1d1d1f] tracking-[-0.374px]">
                           {note.title || 'Tanpa Judul'}
                         </h3>
                         {/* Pin Button */}
@@ -1223,22 +1234,13 @@ export default function Home() {
                       </p>
                     </div>
 
-                    <div className="border-t border-black/5 pt-3 flex items-center justify-between text-[12px] text-[#7a7a7a]">
+                    <div className="flex flex-col gap-2 border-t border-black/5 pt-3 text-[12px] text-[#7a7a7a] sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <div>Dibuat: {formatDate(note.created_at)}</div>
                         <div>Edit: {formatDate(note.updated_at)}</div>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            handleEditClick(note)
-                          }}
-                          className="min-h-11 px-2 text-[#0066cc] hover:underline"
-                        >
-                          Edit
-                        </button>
+                      <div className="flex flex-wrap items-center gap-1 self-end sm:self-auto sm:gap-2">
                         {note.user_id === user.id ? (
                           <button
                             onClick={(event) => {
@@ -1270,12 +1272,12 @@ export default function Home() {
                 <p className="text-[17px]">Tidak ada catatan yang dibuang.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
                 {trashedNotes.map((note) => (
                   <div
                     key={note.id}
                     data-note-card
-                    className="bg-[#ffffff] p-6 rounded-[18px] border border-[#e0e0e0] flex flex-col justify-between opacity-80"
+                    className="flex min-w-0 flex-col justify-between rounded-[18px] border border-[#e0e0e0] bg-[#ffffff] p-5 opacity-80 sm:p-6"
                   >
                     <div>
                       <h3 className="text-[17px] font-semibold text-[#1d1d1f] mb-2 line-clamp-1">
@@ -1286,9 +1288,9 @@ export default function Home() {
                       </p>
                     </div>
 
-                    <div className="border-t border-[#f0f0f0] pt-3 flex items-center justify-between text-[12px]">
+                    <div className="flex flex-col gap-2 border-t border-[#f0f0f0] pt-3 text-[12px] sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-[#7a7a7a]">Dibuang</span>
-                      <div className="flex gap-3">
+                      <div className="flex flex-wrap gap-x-2 gap-y-1 self-end sm:self-auto sm:gap-3">
                         <button
                           onClick={() => toggleTrash(note)}
                           className="text-[#0066cc] font-medium hover:underline"
@@ -1312,7 +1314,7 @@ export default function Home() {
 
         {confirmation && (
           <div
-            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px] animate-modal-backdrop"
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setConfirmation(null)
             }}
@@ -1322,7 +1324,7 @@ export default function Home() {
               aria-modal="true"
               aria-labelledby="confirmation-title"
               aria-describedby="confirmation-description"
-              className="w-full max-w-[420px] rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-7 animate-confirm-enter"
+              className="max-h-[90dvh] w-full max-w-[420px] overflow-y-auto rounded-[18px] border border-[#e0e0e0] bg-white p-5 animate-confirm-enter sm:p-7"
             >
               <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-full bg-[#f5f5f7] text-[21px] font-semibold text-[#0066cc]" aria-hidden="true">
                 {confirmation.action === 'trash' ? '↘' : '×'}
@@ -1335,7 +1337,7 @@ export default function Home() {
                   ? `“${confirmation.note.title || 'Tanpa Judul'}” akan dipindahkan ke tong sampah. Kamu masih bisa memulihkannya nanti.`
                   : `“${confirmation.note.title || 'Tanpa Judul'}” akan dihapus selamanya dan tidak dapat dipulihkan.`}
               </p>
-              <div className="mt-7 flex justify-end gap-3">
+              <div className="mt-6 flex flex-wrap justify-end gap-2 sm:mt-7 sm:gap-3">
                 <button
                   type="button"
                   autoFocus
@@ -1358,7 +1360,7 @@ export default function Home() {
 
         {isSettingsOpen && (
           <div
-            className="fixed inset-0 z-[65] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px] animate-modal-backdrop"
+            className="fixed inset-0 z-[65] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setIsSettingsOpen(false)
             }}
@@ -1368,7 +1370,7 @@ export default function Home() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="account-settings-title"
-              className="w-full max-w-[520px] max-h-[min(82vh,720px)] overflow-y-auto rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-8 animate-modal-enter"
+              className="max-h-[90dvh] w-full max-w-[520px] overflow-y-auto overscroll-contain rounded-[18px] border border-[#e0e0e0] bg-white p-5 animate-modal-enter sm:max-h-[min(82vh,720px)] sm:p-8"
             >
               <div className="mb-6 flex items-start justify-between gap-4">
                 <div>
@@ -1423,7 +1425,7 @@ export default function Home() {
               )}
 
               {settingsMessage && <p aria-live="polite" className="mt-4 text-[14px] text-[#1d1d1f]">{settingsMessage}</p>}
-              <div className="mt-7 flex justify-end gap-3">
+              <div className="mt-6 flex flex-wrap justify-end gap-2 sm:mt-7 sm:gap-3">
                 <button type="button" onClick={() => setIsSettingsOpen(false)} className="min-h-11 rounded-full px-4 text-[14px] text-[#0066cc] hover:bg-[#f5f5f7] active:scale-95">Batal</button>
                 <button type="submit" disabled={isSettingsSaving} className="min-h-11 rounded-full bg-[#0066cc] px-5 text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95 disabled:opacity-60">{isSettingsSaving ? 'Menyimpan...' : 'Simpan'}</button>
               </div>
@@ -1433,7 +1435,7 @@ export default function Home() {
 
         {isPremiumOfferOpen && (
           <div
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px] animate-modal-backdrop"
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) {
                 setIsPremiumOfferOpen(false)
@@ -1441,7 +1443,7 @@ export default function Home() {
               }
             }}
           >
-            <section role="dialog" aria-modal="true" aria-labelledby="premium-offer-title" className="w-full max-w-[560px] max-h-[min(86vh,760px)] overflow-y-auto rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-8 animate-modal-enter">
+            <section role="dialog" aria-modal="true" aria-labelledby="premium-offer-title" className="max-h-[90dvh] w-full max-w-[560px] overflow-y-auto overscroll-contain rounded-[18px] border border-[#e0e0e0] bg-white p-5 animate-modal-enter sm:max-h-[min(86vh,760px)] sm:p-8">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="mb-2 text-[12px] font-semibold text-[#0066cc]">NOTES PREMIUM</p>
@@ -1457,7 +1459,7 @@ export default function Home() {
                 <li className="flex gap-3"><span className="text-[#0066cc]">✓</span><span>Pin catatan tanpa batas</span></li>
               </ul>
 
-              <div className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="mt-6 grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:mt-7">
                 <button type="button" disabled={isActivatingPremium} onClick={() => activatePremiumPlan(1)} className="min-h-[84px] rounded-[11px] border border-[#e0e0e0] px-4 py-3 text-left transition-colors hover:bg-[#fafafc] active:scale-[0.98] disabled:opacity-60">
                   <span className="block text-[14px] text-[#7a7a7a]">1 bulan</span>
                   <span className="mt-1 block text-[21px] font-semibold tracking-[-0.2px] text-[#1d1d1f]">Rp10.000</span>
@@ -1479,12 +1481,12 @@ export default function Home() {
 
         {premiumDetailOpen && isPremium && (
           <div
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px] animate-modal-backdrop"
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setPremiumDetailOpen(false)
             }}
           >
-            <section role="dialog" aria-modal="true" aria-labelledby="premium-detail-title" className="w-full max-w-[480px] rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-8 animate-modal-enter">
+            <section role="dialog" aria-modal="true" aria-labelledby="premium-detail-title" className="max-h-[90dvh] w-full max-w-[480px] overflow-y-auto rounded-[18px] border border-[#e0e0e0] bg-white p-5 animate-modal-enter sm:p-8">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="mb-2 text-[12px] font-semibold text-[#0066cc]">★ PREMIUM AKTIF</p>
@@ -1511,12 +1513,12 @@ export default function Home() {
 
         {premiumSuccessExpiry && (
           <div
-            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px] animate-modal-backdrop"
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setPremiumSuccessExpiry(null)
             }}
           >
-            <section role="dialog" aria-modal="true" aria-labelledby="premium-success-title" className="w-full max-w-[480px] rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-8 animate-modal-enter">
+            <section role="dialog" aria-modal="true" aria-labelledby="premium-success-title" className="max-h-[90dvh] w-full max-w-[480px] overflow-y-auto rounded-[18px] border border-[#e0e0e0] bg-white p-5 animate-modal-enter sm:p-8">
               <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-full bg-[#f5f5f7] text-[21px] text-[#0066cc]" aria-hidden="true">★</div>
               <p className="mb-2 text-[12px] font-semibold text-[#0066cc]">PREMIUM AKTIF</p>
               <h2 id="premium-success-title" className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">Akunmu sekarang Premium.</h2>
