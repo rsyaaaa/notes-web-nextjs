@@ -66,6 +66,7 @@ export default function Home() {
   const [authMessage, setAuthMessage] = useState('')
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false)
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
+  const [isDarkMode, setIsDarkMode] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [settingsName, setSettingsName] = useState('')
   const [settingsPassword, setSettingsPassword] = useState('')
@@ -95,6 +96,21 @@ export default function Home() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [pinAnimation, setPinAnimation] = useState<{ id: number; pinning: boolean } | null>(null)
   const [confirmation, setConfirmation] = useState<{ action: 'trash' | 'delete'; note: Note } | null>(null)
+
+  useEffect(() => {
+    const storedTheme = window.localStorage.getItem('notes-theme')
+    const shouldUseDarkMode = storedTheme === 'dark'
+    document.documentElement.dataset.theme = shouldUseDarkMode ? 'dark' : 'light'
+    const frame = window.requestAnimationFrame(() => setIsDarkMode(shouldUseDarkMode))
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
+
+  const toggleDarkMode = () => {
+    const nextMode = !isDarkMode
+    setIsDarkMode(nextMode)
+    window.localStorage.setItem('notes-theme', nextMode ? 'dark' : 'light')
+    document.documentElement.dataset.theme = nextMode ? 'dark' : 'light'
+  }
 
   const fetchNotes = async (userId: string) => {
     const { data: memberships, error: membershipError } = await supabase
@@ -719,7 +735,7 @@ export default function Home() {
   // --- 1. LANDING / LOGIN PAGE (Apple Style Tile) ---
   if (!user) {
     return (
-      <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans">
+      <main className={`min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans ${isDarkMode ? 'theme-dark' : ''}`}>
         <header className="h-[44px] bg-black text-white flex items-center justify-between px-6 md:px-12 text-[12px] tracking-[-0.12px]">
           <span className="font-semibold text-sm"> Notes</span>
           <span>Catatan pribadimu</span>
@@ -831,7 +847,7 @@ export default function Home() {
 
   // --- 2. MAIN DASHBOARD PAGE (Apple Design System) ---
   return (
-    <div className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans flex flex-col selection:bg-[#0066cc] selection:text-white animate-dashboard-enter">
+    <div className={`min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans flex flex-col selection:bg-[#0066cc] selection:text-white animate-dashboard-enter ${isDarkMode ? 'theme-dark' : ''}`}>
       {/* Global Thin Nav Bar */}
       <header className="h-[44px] bg-[#000000] text-white flex items-center justify-between px-6 md:px-12 text-[12px] tracking-[-0.12px] sticky top-0 z-50">
         <div className="flex items-center gap-2">
@@ -883,6 +899,19 @@ export default function Home() {
                   Paket aktif: {isPremium ? '★ Premium' : 'Free Plan'}
                 </button>
               </div>
+                <div className="flex min-h-12 items-center justify-between gap-3 border-b border-[#f0f0f0] px-3">
+                  <span className="text-[14px]">Tampilan gelap</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isDarkMode}
+                    aria-label="Aktifkan tampilan gelap"
+                    onClick={toggleDarkMode}
+                    className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 active:scale-95 ${isDarkMode ? 'bg-[#0066cc]' : 'bg-[#d2d2d7]'}`}
+                  >
+                    <span className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white transition-transform duration-200 ${isDarkMode ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
               <button
                 role="menuitem"
                 onClick={() => {
@@ -997,6 +1026,7 @@ export default function Home() {
             <form
               onSubmit={handleSaveNote}
               style={{ backgroundColor: accentColor }}
+              data-note-editor
               role="dialog"
               aria-modal="true"
               aria-labelledby="note-editor-title"
@@ -1152,6 +1182,7 @@ export default function Home() {
                   <article
                     key={note.id}
                     style={{ backgroundColor: note.accent_color || '#ffffff' }}
+                    data-note-card
                     role="button"
                     tabIndex={0}
                     aria-label={`Buka catatan ${note.title || 'Tanpa Judul'}`}
@@ -1243,6 +1274,7 @@ export default function Home() {
                 {trashedNotes.map((note) => (
                   <div
                     key={note.id}
+                    data-note-card
                     className="bg-[#ffffff] p-6 rounded-[18px] border border-[#e0e0e0] flex flex-col justify-between opacity-80"
                   >
                     <div>

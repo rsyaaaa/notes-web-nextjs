@@ -25,6 +25,114 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+:root[data-theme="dark"] .theme-dark {
+  background-color: #171719;
+  color: #f5f5f7;
+}
+
+:root[data-theme="dark"] .theme-dark,
+:root[data-theme="dark"] .theme-dark * {
+  transition-property: background-color, border-color, color;
+  transition-duration: 220ms;
+  transition-timing-function: ease;
+}
+
+:root[data-theme="dark"] .theme-dark [class~="bg-[#f5f5f7]"],
+:root[data-theme="dark"] .theme-dark [class~="bg-[#f5f5f7]/80"] {
+  background-color: #1d1d1f !important;
+}
+
+:root[data-theme="dark"] .theme-dark [class~="bg-[#ffffff]"],
+:root[data-theme="dark"] .theme-dark [class~="bg-white"] {
+  background-color: #252527 !important;
+}
+
+:root[data-theme="dark"] .theme-dark [class~="bg-[#fafafc]"] {
+  background-color: #2a2a2c !important;
+}
+
+:root[data-theme="dark"] .theme-dark [class~="bg-[#1d1d1f]"] {
+  background-color: #d2d2d7 !important;
+  color: #1d1d1f !important;
+}
+
+:root[data-theme="dark"] .theme-dark [class~="bg-black/5"] {
+  background-color: rgb(255 255 255 / 8%) !important;
+}
+
+:root[data-theme="dark"] .theme-dark [class~="text-[#1d1d1f]"],
+:root[data-theme="dark"] .theme-dark [class~="text-[#1d1d1f]/80"] {
+  color: #f5f5f7 !important;
+}
+
+:root[data-theme="dark"] .theme-dark [class~="text-[#333333]"] {
+  color: #e5e5e7 !important;
+}
+
+:root[data-theme="dark"] .theme-dark [class~="text-[#7a7a7a]"] {
+  color: #b3b3b8 !important;
+}
+
+:root[data-theme="dark"] .theme-dark [class~="border-[#e0e0e0]"] {
+  border-color: #454549 !important;
+}
+
+:root[data-theme="dark"] .theme-dark [class~="border-[#f0f0f0]"] {
+  border-color: #3a3a3e !important;
+}
+
+:root[data-theme="dark"] .theme-dark [data-note-card] {
+  background-color: #272729 !important;
+  border-color: #454549 !important;
+}
+
+:root[data-theme="dark"] .theme-dark [data-note-card] [class~="text-[#1d1d1f]"],
+:root[data-theme="dark"] .theme-dark [data-note-card] [class~="text-[#1d1d1f]/80"],
+:root[data-theme="dark"] .theme-dark [data-note-card] [class~="text-[#7a7a7a]"] {
+  color: #f5f5f7 !important;
+}
+
+:root[data-theme="dark"] .theme-dark [data-note-card] [class~="border-black/5"] {
+  border-color: rgb(255 255 255 / 12%) !important;
+}
+
+:root[data-theme="dark"] .theme-dark [data-note-editor] {
+  background-color: #252527 !important;
+  border-color: #454549 !important;
+  color: #f5f5f7 !important;
+}
+
+:root[data-theme="dark"] .theme-dark [data-note-editor] [class~="text-[#1d1d1f]"],
+:root[data-theme="dark"] .theme-dark [data-note-editor] [class~="text-[#7a7a7a]"] {
+  color: #f5f5f7 !important;
+}
+
+:root[data-theme="dark"] .theme-dark [data-note-editor] [class~="border-[#e0e0e0]"],
+:root[data-theme="dark"] .theme-dark [data-note-editor] [class~="border-[#f0f0f0]"] {
+  border-color: #454549 !important;
+}
+
+:root[data-theme="dark"] .theme-dark [data-note-editor] input,
+:root[data-theme="dark"] .theme-dark [data-note-editor] textarea {
+  color: #f5f5f7 !important;
+}
+
+:root[data-theme="dark"] .theme-dark [data-note-editor] input::placeholder,
+:root[data-theme="dark"] .theme-dark [data-note-editor] textarea::placeholder {
+  color: #b3b3b8 !important;
+}
+
+:root[data-theme="dark"] .theme-dark input,
+:root[data-theme="dark"] .theme-dark textarea,
+:root[data-theme="dark"] .theme-dark select {
+  color-scheme: dark;
+}
+
+:root[data-theme="dark"] .theme-dark input::placeholder,
+:root[data-theme="dark"] .theme-dark textarea::placeholder {
+  color: #9b9ba1;
+}
+
 @keyframes modal-backdrop-in {
   from { opacity: 0; }
   to { opacity: 1; }
