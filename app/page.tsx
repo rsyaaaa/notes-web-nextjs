@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabaseClient'
@@ -12,6 +12,7 @@ interface Note {
   title: string
   content: string
   accent_color: string
+  folder_id: number | null
   is_pinned: boolean
   is_trashed: boolean
   created_at: string
@@ -22,6 +23,19 @@ interface NoteDraft {
   title: string
   content: string
   accentColor: string
+  folderId: string
+}
+
+interface UserProfile {
+  full_name: string
+  avatar_url: string | null
+  plan: 'free' | 'premium'
+}
+
+interface NotePerson {
+  user_id: string
+  full_name: string
+  avatar_url: string | null
 }
 
 export default function Home() {
@@ -29,6 +43,33 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [notes, setNotes] = useState<Note[]>([])
   const [activeTab, setActiveTab] = useState<'notes' | 'trash'>('notes')
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [folders, setFolders] = useState<{ id: number; name: string }[]>([])
+  const [folderFilter, setFolderFilter] = useState('all')
+  const [selectedFolderId, setSelectedFolderId] = useState('')
+  const [folderName, setFolderName] = useState('')
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false)
+  const [premiumMessage, setPremiumMessage] = useState('')
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const [authName, setAuthName] = useState('')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [showAuthPassword, setShowAuthPassword] = useState(false)
+  const [authMessage, setAuthMessage] = useState('')
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false)
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [settingsName, setSettingsName] = useState('')
+  const [settingsPassword, setSettingsPassword] = useState('')
+  const [showSettingsPassword, setShowSettingsPassword] = useState(false)
+  const [settingsMessage, setSettingsMessage] = useState('')
+  const [isSettingsSaving, setIsSettingsSaving] = useState(false)
+  const [noteMembers, setNoteMembers] = useState<NotePerson[]>([])
+  const [onlineMembers, setOnlineMembers] = useState<NotePerson[]>([])
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [sharingMessage, setSharingMessage] = useState('')
+  const currentDraftRef = useRef<NoteDraft>({ title: '', content: '', accentColor: '#ffffff', folderId: '' })
+  const savedDraftRef = useRef<NoteDraft>({ title: '', content: '', accentColor: '#ffffff', folderId: '' })
 
   // State Form Catatan Baru / Edit
   const [title, setTitle] = useState('')
@@ -41,16 +82,31 @@ export default function Home() {
     title: '',
     content: '',
     accentColor: '#ffffff',
+    folderId: '',
   })
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [pinAnimation, setPinAnimation] = useState<{ id: number; pinning: boolean } | null>(null)
   const [confirmation, setConfirmation] = useState<{ action: 'trash' | 'delete'; note: Note } | null>(null)
 
   const fetchNotes = async (userId: string) => {
+    const { data: memberships, error: membershipError } = await supabase
+      .from('note_members')
+      .select('note_id')
+      .eq('user_id', userId)
+
+    if (membershipError) {
+      console.error('Error fetching shared notes:', membershipError.message)
+      return
+    }
+
+    const sharedIds = (memberships ?? []).map((membership) => membership.note_id)
+    const visibilityFilter = sharedIds.length > 0
+      ? `user_id.eq.${userId},id.in.(${sharedIds.join(',')})`
+      : `user_id.eq.${userId}`
     const { data, error } = await supabase
       .from('notes')
       .select('*')
-      .eq('user_id', userId)
+      .or(visibilityFilter)
       .order('is_pinned', { ascending: false })
       .order('updated_at', { ascending: false })
 
@@ -59,6 +115,37 @@ export default function Home() {
     } else {
       setNotes(data || [])
     }
+  }
+
+  const fetchProfile = async (currentUser: User) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('full_name, avatar_url, plan')
+      .eq('id', currentUser.id)
+      .maybeSingle()
+
+    if (error) {
+      console.error('Error fetching profile:', error.message)
+      return
+    }
+
+    const nextProfile: UserProfile = data ?? {
+      full_name: currentUser.user_metadata?.full_name ?? currentUser.user_metadata?.name ?? '',
+      avatar_url: currentUser.user_metadata?.avatar_url ?? null,
+      plan: 'free',
+    }
+    setProfile(nextProfile)
+    setSettingsName(nextProfile.full_name)
+  }
+
+  const fetchFolders = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('note_folders')
+      .select('id, name')
+      .eq('user_id', userId)
+      .order('name')
+
+    if (!error) setFolders(data ?? [])
   }
 
   // Options Accent Color khas Apple Soft Pastel
@@ -77,6 +164,8 @@ export default function Home() {
       setUser(session?.user ?? null)
       if (session?.user) {
         fetchNotes(session.user.id)
+        fetchProfile(session.user)
+        fetchFolders(session.user.id)
       }
       setLoading(false)
     }
@@ -88,8 +177,12 @@ export default function Home() {
       setUser(currentUser)
       if (currentUser) {
         fetchNotes(currentUser.id)
+        fetchProfile(currentUser)
+        fetchFolders(currentUser.id)
       } else {
         setNotes([])
+        setProfile(null)
+        setFolders([])
       }
       setLoading(false)
     })
@@ -101,16 +194,136 @@ export default function Home() {
 
   // Auth Functions
   const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/`,
       },
     })
+    if (error) setAuthMessage(error.message)
+  }
+
+  const handleEmailAuth = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setIsAuthSubmitting(true)
+    setAuthMessage('')
+
+    const result = authMode === 'register'
+      ? await supabase.auth.signUp({
+          email: authEmail,
+          password: authPassword,
+          options: { data: { full_name: authName.trim() } },
+        })
+      : await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword })
+
+    if (result.error) {
+      setAuthMessage(result.error.message)
+    } else if (authMode === 'register' && !result.data.session) {
+      setAuthMessage('Akun berhasil dibuat. Periksa email untuk konfirmasi sebelum masuk.')
+    }
+    setIsAuthSubmitting(false)
   }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
+  }
+
+  const handleSaveSettings = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!user) return
+    setIsSettingsSaving(true)
+    setSettingsMessage('')
+
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ full_name: settingsName.trim() })
+      .eq('id', user.id)
+    if (profileError) {
+      setSettingsMessage(profileError.message)
+      setIsSettingsSaving(false)
+      return
+    }
+
+    const providers = (user.app_metadata?.providers as string[] | undefined) ?? []
+    if (settingsPassword && providers.includes('email')) {
+      const { error: passwordError } = await supabase.auth.updateUser({ password: settingsPassword })
+      if (passwordError) {
+        setSettingsMessage(passwordError.message)
+        setIsSettingsSaving(false)
+        return
+      }
+      setSettingsPassword('')
+    }
+
+    await fetchProfile(user)
+    setSettingsMessage('Pengaturan akun tersimpan.')
+    setIsSettingsSaving(false)
+  }
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user) return
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) {
+      setSettingsMessage('Pilih gambar dengan ukuran maksimal 5 MB.')
+      return
+    }
+
+    setIsSettingsSaving(true)
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'png'
+    const path = `${user.id}/avatar-${Date.now()}.${extension}`
+    const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+    if (uploadError) {
+      setSettingsMessage(uploadError.message)
+      setIsSettingsSaving(false)
+      return
+    }
+
+    const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ avatar_url: data.publicUrl })
+      .eq('id', user.id)
+    if (profileError) setSettingsMessage(profileError.message)
+    else {
+      await fetchProfile(user)
+      setSettingsMessage('Foto profil berhasil diperbarui.')
+    }
+    setIsSettingsSaving(false)
+    event.target.value = ''
+  }
+
+  const createFolder = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!user || profile?.plan !== 'premium' || !folderName.trim()) return
+    const { error } = await supabase.from('note_folders').insert({ user_id: user.id, name: folderName.trim() })
+    if (error) setPremiumMessage(error.message)
+    else {
+      setFolderName('')
+      setIsCreatingFolder(false)
+      await fetchFolders(user.id)
+    }
+  }
+
+  const inviteCollaborator = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!user || !editingNoteId || profile?.plan !== 'premium') return
+    setSharingMessage('Mengirim undangan...')
+    const { data, error } = await supabase.rpc('invite_note_collaborator', {
+      target_note_id: editingNoteId,
+      collaborator_email: inviteEmail,
+    })
+    if (error) {
+      setSharingMessage(error.message)
+      return
+    }
+    setInviteEmail('')
+    setSharingMessage('Kolaborator berhasil ditambahkan.')
+    setNoteMembers((members) => {
+      const invited = data?.[0]
+      if (!invited || members.some((member) => member.user_id === invited.user_id)) return members
+      return [...members, invited]
+    })
   }
 
   // 3. CRUD & Feature Handlers
@@ -119,7 +332,7 @@ export default function Home() {
     if (!user) return
     if (!title.trim() && !content.trim()) return
 
-    const draft = { title, content, accentColor }
+    const draft = { title, content, accentColor, folderId: selectedFolderId }
     let saveError = false
     if (editingNoteId) {
       const { error } = await supabase
@@ -128,10 +341,10 @@ export default function Home() {
           title,
           content,
           accent_color: accentColor,
+          folder_id: selectedFolderId ? Number(selectedFolderId) : null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', editingNoteId)
-        .eq('user_id', user.id)
 
       saveError = Boolean(error)
     } else {
@@ -140,6 +353,7 @@ export default function Home() {
         title,
         content,
         accent_color: accentColor,
+        folder_id: selectedFolderId ? Number(selectedFolderId) : null,
       })
       saveError = Boolean(error)
     }
@@ -157,26 +371,33 @@ export default function Home() {
   }
 
   const handleEditClick = (note: Note) => {
+    setNoteMembers([])
+    setOnlineMembers([])
     const draft = {
       title: note.title,
       content: note.content,
       accentColor: note.accent_color || '#ffffff',
+      folderId: note.folder_id ? String(note.folder_id) : '',
     }
     setEditingNoteId(note.id)
     setTitle(draft.title)
     setContent(draft.content)
     setAccentColor(draft.accentColor)
+    setSelectedFolderId(draft.folderId)
     setLastSavedDraft(draft)
     setSaveStatus('idle')
     setIsFormOpen(true)
   }
 
   const openNewNote = () => {
-    const emptyDraft = { title: '', content: '', accentColor: '#ffffff' }
+    setNoteMembers([])
+    setOnlineMembers([])
+    const emptyDraft = { title: '', content: '', accentColor: '#ffffff', folderId: '' }
     setEditingNoteId(null)
     setTitle(emptyDraft.title)
     setContent(emptyDraft.content)
     setAccentColor(emptyDraft.accentColor)
+    setSelectedFolderId(emptyDraft.folderId)
     setLastSavedDraft(emptyDraft)
     setSaveStatus('idle')
     setIsFormOpen(true)
@@ -184,6 +405,8 @@ export default function Home() {
 
   const closeNoteForm = useCallback(() => {
     if (!isFormOpen || isFormClosing) return
+    setNoteMembers([])
+    setOnlineMembers([])
     setIsFormClosing(true)
     window.setTimeout(() => {
       setIsFormOpen(false)
@@ -192,9 +415,14 @@ export default function Home() {
   }, [isFormClosing, isFormOpen])
 
   useEffect(() => {
+    currentDraftRef.current = { title, content, accentColor, folderId: selectedFolderId }
+    savedDraftRef.current = lastSavedDraft
+  }, [accentColor, content, lastSavedDraft, selectedFolderId, title])
+
+  useEffect(() => {
     if (!isFormOpen || !user) return
 
-    const draft = { title, content, accentColor }
+    const draft = { title, content, accentColor, folderId: selectedFolderId }
     if (JSON.stringify(draft) === JSON.stringify(lastSavedDraft)) return
 
     const timeout = window.setTimeout(async () => {
@@ -208,10 +436,10 @@ export default function Home() {
             title: draft.title,
             content: draft.content,
             accent_color: draft.accentColor,
+            folder_id: draft.folderId ? Number(draft.folderId) : null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', editingNoteId)
-          .eq('user_id', user.id)
 
         if (error) {
           setSaveStatus('error')
@@ -225,6 +453,7 @@ export default function Home() {
             title: draft.title,
             content: draft.content,
             accent_color: draft.accentColor,
+            folder_id: draft.folderId ? Number(draft.folderId) : null,
           })
           .select('id')
           .single()
@@ -242,7 +471,98 @@ export default function Home() {
     }, 5000)
 
     return () => window.clearTimeout(timeout)
-  }, [accentColor, content, editingNoteId, isFormOpen, lastSavedDraft, title, user])
+  }, [accentColor, content, editingNoteId, isFormOpen, lastSavedDraft, selectedFolderId, title, user])
+
+  useEffect(() => {
+    if (!isFormOpen || editingNoteId === null || !user) {
+      return
+    }
+
+    let isCurrent = true
+    const loadMembers = async () => {
+      const { data: memberRows } = await supabase
+        .from('note_members')
+        .select('user_id')
+        .eq('note_id', editingNoteId)
+      const memberIds = [...new Set([user.id, ...(memberRows ?? []).map((member) => member.user_id)])]
+      const { data: people } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', memberIds)
+      if (isCurrent) {
+        setNoteMembers((people ?? []).map((person) => ({
+          user_id: person.id,
+          full_name: person.full_name,
+          avatar_url: person.avatar_url,
+        })))
+      }
+    }
+    void loadMembers()
+
+    const channel = supabase.channel(`notes:${editingNoteId}`, {
+      config: { private: true, presence: { key: user.id } },
+    })
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const presence = channel.presenceState<NotePerson>()
+        const people = Object.values(presence).flat().filter((person) => person.user_id !== user.id)
+        if (isCurrent) setOnlineMembers(people)
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({
+            user_id: user.id,
+            full_name: profile?.full_name || user.email || 'Pengguna',
+            avatar_url: profile?.avatar_url ?? null,
+          })
+        }
+      })
+
+    return () => {
+      isCurrent = false
+      void supabase.removeChannel(channel)
+    }
+  }, [editingNoteId, isFormOpen, profile?.avatar_url, profile?.full_name, user])
+
+  useEffect(() => {
+    if (!isFormOpen || editingNoteId === null) return
+
+    const channel = supabase
+      .channel(`note-updates:${editingNoteId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'notes',
+        filter: `id=eq.${editingNoteId}`,
+      }, (payload) => {
+        const remoteNote = payload.new as Note
+        const localDraft = currentDraftRef.current
+        const savedDraft = savedDraftRef.current
+        if (JSON.stringify(localDraft) !== JSON.stringify(savedDraft)) {
+          setSharingMessage('Kolaborator menyimpan perubahan. Simpan draft ini untuk mempertahankan versimu.')
+          return
+        }
+
+        const remoteDraft = {
+          title: remoteNote.title ?? '',
+          content: remoteNote.content ?? '',
+          accentColor: remoteNote.accent_color || '#ffffff',
+          folderId: remoteNote.folder_id ? String(remoteNote.folder_id) : '',
+        }
+        setTitle(remoteDraft.title)
+        setContent(remoteDraft.content)
+        setAccentColor(remoteDraft.accentColor)
+        setSelectedFolderId(remoteDraft.folderId)
+        setLastSavedDraft(remoteDraft)
+        setSaveStatus('saved')
+        setNotes((currentNotes) => currentNotes.map((note) => note.id === remoteNote.id ? remoteNote : note))
+      })
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [editingNoteId, isFormOpen])
 
   useEffect(() => {
     if (!isFormOpen && !confirmation) return
@@ -258,15 +578,22 @@ export default function Home() {
 
   const togglePin = async (note: Note) => {
     if (!user) return
+    if (!note.is_pinned && note.user_id === user.id && profile?.plan !== 'premium') {
+      const currentPinnedCount = notes.filter((item) => item.user_id === user.id && item.is_pinned && !item.is_trashed).length
+      if (currentPinnedCount >= 3) {
+        setPremiumMessage('Paket Free memiliki batas 3 catatan pin. Premium membuka pin tanpa batas.')
+        return
+      }
+    }
     setPinAnimation({ id: note.id, pinning: !note.is_pinned })
     window.setTimeout(() => setPinAnimation(null), 500)
     const { error } = await supabase
       .from('notes')
       .update({ is_pinned: !note.is_pinned, updated_at: new Date().toISOString() })
       .eq('id', note.id)
-      .eq('user_id', user.id)
 
     if (!error) fetchNotes(user.id)
+    else setPremiumMessage(error.message)
   }
 
   const toggleTrash = async (note: Note) => {
@@ -310,7 +637,7 @@ export default function Home() {
   }
 
   // Filter Notes berdasarkan Tab
-  const activeNotes = notes.filter((n) => !n.is_trashed)
+  const activeNotes = notes.filter((n) => !n.is_trashed && (folderFilter === 'all' || String(n.folder_id ?? '') === folderFilter))
   const trashedNotes = notes.filter((n) => n.is_trashed)
 
   if (loading) {
@@ -324,35 +651,111 @@ export default function Home() {
   // --- 1. LANDING / LOGIN PAGE (Apple Style Tile) ---
   if (!user) {
     return (
-      <main className="min-h-screen bg-[#ffffff] text-[#1d1d1f] flex flex-col font-sans">
-        {/* Global Nav Bar (Pure Black) */}
-        <header className="h-[44px] bg-[#000000] text-white flex items-center justify-between px-8 text-[12px] font-normal tracking-[-0.12px]">
+      <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans">
+        <header className="h-[44px] bg-black text-white flex items-center justify-between px-6 md:px-12 text-[12px] tracking-[-0.12px]">
           <span className="font-semibold text-sm"> Notes</span>
-          <span>Web App</span>
+          <span>Catatan pribadimu</span>
         </header>
+        <div className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1120px] items-center justify-center gap-16 px-6 py-12 lg:justify-between">
+          <section className="hidden max-w-[470px] lg:block">
+            <h1 className="text-[56px] font-semibold leading-[1.07] tracking-[-0.374px]">
+              Ruang tenang untuk semua idemu.
+            </h1>
+            <p className="mt-5 text-[21px] leading-[1.47] text-[#7a7a7a]">
+              Simpan catatan, rencana, dan pemikiran penting dalam satu tempat.
+            </p>
+          </section>
 
-        {/* Hero Product Tile (Parchment Canvas) */}
-        <div className="flex-1 bg-[#f5f5f7] flex flex-col items-center justify-center p-8 text-center">
-          <h1 className="text-[40px] md:text-[56px] font-semibold text-[#1d1d1f] tracking-[-0.374px] leading-[1.07] mb-3">
-            Catatanmu. Rapi & Elegan.
-          </h1>
-          <p className="text-[21px] md:text-[28px] text-[#7a7a7a] font-normal tracking-[0.196px] max-w-xl mb-8">
-            Simpan ide, rencana, dan pemikiran penting dalam ruang kerja yang dirancang tanpa gangguan.
-          </p>
+          <section className="w-full max-w-[420px] rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-8">
+            <h1 className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">
+              {authMode === 'login' ? 'Selamat datang kembali' : 'Buat akun Notes'}
+            </h1>
+            <p className="mt-2 text-[17px] leading-[1.47] text-[#7a7a7a]">
+              {authMode === 'login' ? 'Masuk untuk membuka catatanmu.' : 'Daftar untuk mulai menyimpan catatan.'}
+            </p>
 
-          {/* Primary Blue Pill CTA */}
-          <button
-            onClick={handleGoogleLogin}
-            className="flex items-center gap-3 bg-[#0066cc] text-white text-[17px] font-normal px-[22px] py-[11px] rounded-full hover:bg-[#0071e3] active:scale-95 transition-all duration-150"
-          >
-            <svg aria-hidden="true" viewBox="0 0 48 48" className="h-5 w-5 rounded-full bg-white p-[3px]">
-              <path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5h6.6c3.9-3.6 6.1-8.8 6.1-14.9Z" />
-              <path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.6-5c-1.8 1.2-4.1 2-6.9 2-5.3 0-9.8-3.6-11.4-8.4H5.8v5.2A20 20 0 0 0 24 44Z" />
-              <path fill="#FBBC05" d="M12.6 27.8a12 12 0 0 1 0-7.6V15H5.8a20 20 0 0 0 0 18l6.8-5.2Z" />
-              <path fill="#EA4335" d="M24 11.8c3 0 5.7 1 7.8 3l5.8-5.8C34.1 5.7 29.5 4 24 4A20 20 0 0 0 5.8 15l6.8 5.2c1.6-4.8 6.1-8.4 11.4-8.4Z" />
-            </svg>
-            Masuk dengan Google
-          </button>
+            <div className="mt-6 grid grid-cols-2 rounded-full bg-[#f5f5f7] p-1 text-[14px]">
+              <button
+                type="button"
+                onClick={() => { setAuthMode('login'); setAuthMessage('') }}
+                className={`min-h-10 rounded-full transition-all active:scale-95 ${authMode === 'login' ? 'bg-white text-[#1d1d1f]' : 'text-[#7a7a7a]'}`}
+              >Masuk</button>
+              <button
+                type="button"
+                onClick={() => { setAuthMode('register'); setAuthMessage('') }}
+                className={`min-h-10 rounded-full transition-all active:scale-95 ${authMode === 'register' ? 'bg-white text-[#1d1d1f]' : 'text-[#7a7a7a]'}`}
+              >Daftar</button>
+            </div>
+
+            <form onSubmit={handleEmailAuth} className="mt-6 space-y-4">
+              {authMode === 'register' && (
+                <label className="block text-[14px] text-[#333333]">
+                  Nama
+                  <input
+                    required
+                    autoComplete="name"
+                    value={authName}
+                    onChange={(event) => setAuthName(event.target.value)}
+                    className="mt-2 h-11 w-full rounded-[8px] border border-[#e0e0e0] bg-white px-3 text-[17px] text-[#1d1d1f] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
+                  />
+                </label>
+              )}
+              <label className="block text-[14px] text-[#333333]">
+                Email
+                <input
+                  required
+                  type="email"
+                  autoComplete="email"
+                  value={authEmail}
+                  onChange={(event) => setAuthEmail(event.target.value)}
+                  className="mt-2 h-11 w-full rounded-[8px] border border-[#e0e0e0] bg-white px-3 text-[17px] text-[#1d1d1f] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
+                />
+              </label>
+              <label className="block text-[14px] text-[#333333]">
+                Password
+                <span className="mt-2 flex h-11 items-center rounded-[8px] border border-[#e0e0e0] bg-white focus-within:ring-2 focus-within:ring-[#0071e3]">
+                  <input
+                    required
+                    minLength={8}
+                    type={showAuthPassword ? 'text' : 'password'}
+                    autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
+                    value={authPassword}
+                    onChange={(event) => setAuthPassword(event.target.value)}
+                    className="h-full min-w-0 flex-1 bg-transparent px-3 text-[17px] text-[#1d1d1f] outline-none"
+                  />
+                  <button
+                    type="button"
+                    aria-label={showAuthPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                    aria-pressed={showAuthPassword}
+                    onClick={() => setShowAuthPassword((visible) => !visible)}
+                    className="h-11 rounded-full px-3 text-[12px] text-[#0066cc] active:scale-95"
+                  >{showAuthPassword ? 'Sembunyikan' : 'Tampilkan'}</button>
+                </span>
+              </label>
+              {authMessage && <p role="status" className="text-[14px] leading-[1.4] text-[#1d1d1f]">{authMessage}</p>}
+              <button
+                type="submit"
+                disabled={isAuthSubmitting}
+                className="min-h-11 w-full rounded-full bg-[#0066cc] px-5 text-[17px] text-white transition-all hover:bg-[#0071e3] active:scale-[0.98] disabled:opacity-60"
+              >{isAuthSubmitting ? 'Memproses...' : authMode === 'login' ? 'Masuk' : 'Buat Akun'}</button>
+            </form>
+
+            <div className="my-5 flex items-center gap-3 text-[12px] text-[#7a7a7a]">
+              <span className="h-px flex-1 bg-[#e0e0e0]" /><span>atau</span><span className="h-px flex-1 bg-[#e0e0e0]" />
+            </div>
+            <button
+              onClick={handleGoogleLogin}
+              className="flex min-h-11 w-full items-center justify-center gap-3 rounded-full border border-[#e0e0e0] bg-white px-5 text-[14px] text-[#1d1d1f] transition-colors hover:bg-[#fafafc] active:scale-[0.98]"
+            >
+              <svg aria-hidden="true" viewBox="0 0 48 48" className="h-5 w-5">
+                <path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5h6.6c3.9-3.6 6.1-8.8 6.1-14.9Z" />
+                <path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.6-5c-1.8 1.2-4.1 2-6.9 2-5.3 0-9.8-3.6-11.4-8.4H5.8v5.2A20 20 0 0 0 24 44Z" />
+                <path fill="#FBBC05" d="M12.6 27.8a12 12 0 0 1 0-7.6V15H5.8a20 20 0 0 0 0 18l6.8-5.2Z" />
+                <path fill="#EA4335" d="M24 11.8c3 0 5.7 1 7.8 3l5.8-5.8C34.1 5.7 29.5 4 24 4A20 20 0 0 0 5.8 15l6.8 5.2c1.6-4.8 6.1-8.4 11.4-8.4Z" />
+              </svg>
+              Masuk dengan Google
+            </button>
+          </section>
         </div>
       </main>
     )
@@ -366,31 +769,63 @@ export default function Home() {
         <div className="flex items-center gap-2">
           <span className="text-base"></span>
           <span className="font-semibold tracking-normal">Notes</span>
+          <span className={`ml-1 rounded-full px-2 py-1 text-[10px] tracking-normal ${profile?.plan === 'premium' ? 'bg-[#0066cc] text-white' : 'bg-white/10 text-white/80'}`}>
+            {profile?.plan === 'premium' ? '★ Premium' : 'Free Plan'}
+          </span>
         </div>
 
         {/* Google Profile Header (Ujung Kanan) */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            {user.user_metadata?.avatar_url && (
-              <Image
-                src={user.user_metadata.avatar_url}
-                alt="Profile"
-                width={24}
-                height={24}
-                unoptimized
-                className="h-6 w-6 rounded-full border border-white/20 object-cover"
-              />
-            )}
-            <span className="hidden sm:inline text-white/90 font-medium">
-              {user.user_metadata?.full_name || user.email}
-            </span>
-          </div>
+        <div className="relative">
           <button
-            onClick={handleLogout}
-            className="bg-[#1d1d1f] hover:bg-zinc-800 text-white text-[12px] px-3 py-1 rounded-[8px] active:scale-95 transition-all"
+            type="button"
+            aria-expanded={isProfileMenuOpen}
+            aria-haspopup="menu"
+            onClick={() => setIsProfileMenuOpen((open) => !open)}
+            className="flex min-h-11 items-center gap-2 rounded-full px-2 text-white transition-colors hover:bg-white/10 active:scale-[0.98]"
           >
-            Keluar
+            {(profile?.avatar_url || user.user_metadata?.avatar_url) ? (
+              <Image
+                src={profile?.avatar_url || user.user_metadata.avatar_url}
+                alt=""
+                width={28}
+                height={28}
+                unoptimized
+                className="h-7 w-7 rounded-full object-cover"
+              />
+            ) : (
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-[12px]">
+                {(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}
+              </span>
+            )}
+            <span className="hidden max-w-[180px] truncate text-[12px] sm:inline">
+              {profile?.full_name || user.email}
+            </span>
+            <span aria-hidden="true" className="text-[10px]">⌄</span>
           </button>
+          {isProfileMenuOpen && (
+            <div role="menu" className="absolute right-0 top-[calc(100%+8px)] z-[55] w-56 rounded-[8px] border border-[#e0e0e0] bg-white p-2 text-[#1d1d1f]">
+              <div className="border-b border-[#f0f0f0] px-3 py-2">
+                <p className="truncate text-[14px] font-semibold">{profile?.full_name || 'Akun Notes'}</p>
+                <p className="truncate text-[12px] text-[#7a7a7a]">{user.email}</p>
+              </div>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setSettingsName(profile?.full_name || '')
+                  setSettingsPassword('')
+                  setSettingsMessage('')
+                  setIsSettingsOpen(true)
+                  setIsProfileMenuOpen(false)
+                }}
+                className="min-h-11 w-full rounded-[5px] px-3 text-left text-[14px] hover:bg-[#f5f5f7] active:scale-[0.99]"
+              >Pengaturan</button>
+              <button
+                role="menuitem"
+                onClick={handleLogout}
+                className="min-h-11 w-full rounded-[5px] px-3 text-left text-[14px] text-[#0066cc] hover:bg-[#f5f5f7] active:scale-[0.99]"
+              >Keluar</button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -435,6 +870,47 @@ export default function Home() {
 
       {/* Content Area */}
       <main className="flex-1 max-w-[1440px] w-full mx-auto px-6 md:px-12 py-8">
+        {premiumMessage && (
+          <div role="status" className="mb-5 flex items-center justify-between gap-4 rounded-[11px] border border-[#e0e0e0] bg-white px-4 py-3 text-[14px] text-[#1d1d1f]">
+            <span>{premiumMessage}</span>
+            <button aria-label="Tutup pesan" onClick={() => setPremiumMessage('')} className="min-h-11 rounded-full px-3 text-[#0066cc] active:scale-95">Tutup</button>
+          </div>
+        )}
+
+        {activeTab === 'notes' && profile?.plan === 'premium' && (
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <label className="sr-only" htmlFor="folder-filter">Filter folder</label>
+            <select
+              id="folder-filter"
+              value={folderFilter}
+              onChange={(event) => setFolderFilter(event.target.value)}
+              className="h-11 min-w-40 rounded-full border border-[#e0e0e0] bg-white px-4 text-[14px] text-[#1d1d1f] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
+            >
+              <option value="all">Semua catatan</option>
+              <option value="">Tanpa folder</option>
+              {folders.map((folder) => <option key={folder.id} value={String(folder.id)}>{folder.name}</option>)}
+            </select>
+            {isCreatingFolder ? (
+              <form onSubmit={createFolder} className="flex flex-wrap items-center gap-2">
+                <input
+                  autoFocus
+                  required
+                  maxLength={80}
+                  aria-label="Nama folder baru"
+                  value={folderName}
+                  onChange={(event) => setFolderName(event.target.value)}
+                  placeholder="Nama folder"
+                  className="h-11 w-48 rounded-full border border-[#e0e0e0] bg-white px-4 text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
+                />
+                <button className="min-h-11 rounded-full bg-[#0066cc] px-4 text-[14px] text-white active:scale-95">Buat</button>
+                <button type="button" onClick={() => setIsCreatingFolder(false)} className="min-h-11 rounded-full px-3 text-[14px] text-[#0066cc] active:scale-95">Batal</button>
+              </form>
+            ) : (
+              <button onClick={() => setIsCreatingFolder(true)} className="min-h-11 rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] active:scale-95">+ Folder</button>
+            )}
+          </div>
+        )}
+
         {/* Note editor modal */}
         {isFormOpen && activeTab === 'notes' && (
           <div
@@ -492,6 +968,45 @@ export default function Home() {
                 rows={10}
                 className="mb-6 min-h-[240px] w-full resize-y bg-transparent text-[17px] leading-[1.47] text-[#1d1d1f] focus:outline-none"
               />
+              {(profile?.plan === 'premium' || notes.find((item) => item.id === editingNoteId)?.user_id !== user.id) && editingNoteId !== null && (
+                <section className="mb-6 border-t border-[#f0f0f0] pt-5" aria-label="Kolaborator catatan">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-[14px] font-semibold text-[#1d1d1f]">Akses bersama</h3>
+                      <p className="mt-1 text-[12px] text-[#7a7a7a]">{onlineMembers.length ? `${onlineMembers.length} lainnya sedang membuka catatan` : 'Tidak ada kolaborator lain yang sedang aktif'}</p>
+                    </div>
+                    <div className="flex -space-x-2" aria-label="Pengguna yang mengakses catatan">
+                      {[...noteMembers.filter((person) => person.user_id === user.id), ...onlineMembers]
+                        .filter((person, index, people) => people.findIndex((item) => item.user_id === person.user_id) === index)
+                        .map((person) => (
+                          <span key={person.user_id} title={person.full_name || person.user_id} className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#f5f5f7] text-[11px] text-[#1d1d1f]">
+                            {person.avatar_url ? <Image src={person.avatar_url} alt="" width={32} height={32} unoptimized className="h-full w-full object-cover" /> : (person.full_name || '?').slice(0, 1).toUpperCase()}
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {noteMembers.filter((person) => person.user_id !== user.id).map((person) => (
+                      <span key={person.user_id} className="rounded-full bg-[#f5f5f7] px-3 py-1.5 text-[12px] text-[#333333]">{person.full_name || 'Kolaborator'}</span>
+                    ))}
+                  </div>
+                  {notes.find((item) => item.id === editingNoteId)?.user_id === user.id && (
+                    <form onSubmit={inviteCollaborator} className="mt-4 flex flex-wrap gap-2">
+                      <input
+                        type="email"
+                        required
+                        aria-label="Email kolaborator"
+                        placeholder="Email akun Notes"
+                        value={inviteEmail}
+                        onChange={(event) => setInviteEmail(event.target.value)}
+                        className="h-11 min-w-0 flex-1 rounded-full border border-[#e0e0e0] bg-white px-4 text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
+                      />
+                      <button className="min-h-11 rounded-full bg-[#0066cc] px-4 text-[14px] text-white active:scale-95">Undang</button>
+                    </form>
+                  )}
+                  {sharingMessage && <p aria-live="polite" className="mt-2 text-[12px] text-[#7a7a7a]">{sharingMessage}</p>}
+                </section>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[#f0f0f0] pt-5">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="text-[12px] text-[#7a7a7a]">Aksen warna</span>
@@ -512,6 +1027,22 @@ export default function Home() {
                     />
                   ))}
                 </div>
+                {profile?.plan === 'premium' && (
+                  <label className="flex items-center gap-2 text-[12px] text-[#7a7a7a]">
+                    Folder
+                    <select
+                      value={selectedFolderId}
+                      onChange={(event) => {
+                        setSelectedFolderId(event.target.value)
+                        setSaveStatus('idle')
+                      }}
+                      className="h-10 rounded-full border border-[#e0e0e0] bg-white px-3 text-[14px] text-[#1d1d1f] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
+                    >
+                      <option value="">Tanpa folder</option>
+                      {folders.map((folder) => <option key={folder.id} value={String(folder.id)}>{folder.name}</option>)}
+                    </select>
+                  </label>
+                )}
                 <div className="ml-auto flex gap-2">
                   <button
                     type="button"
@@ -564,7 +1095,7 @@ export default function Home() {
                           {note.title || 'Tanpa Judul'}
                         </h3>
                         {/* Pin Button */}
-                        <button
+                        {note.user_id === user.id && <button
                           aria-label={note.is_pinned ? 'Lepas pin catatan' : 'Pin catatan'}
                           onClick={(event) => {
                             event.stopPropagation()
@@ -578,7 +1109,7 @@ export default function Home() {
                         >
                           <span aria-hidden="true" className="mr-1 inline-block">{note.is_pinned ? '📌' : '⌖'}</span>
                           {note.is_pinned ? 'Pinned' : 'Pin'}
-                        </button>
+                        </button>}
                       </div>
 
                       <p className="text-[17px] text-[#1d1d1f]/80 leading-[1.47] line-clamp-4 mb-6 whitespace-pre-wrap">
@@ -602,15 +1133,19 @@ export default function Home() {
                         >
                           Edit
                         </button>
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            setConfirmation({ action: 'trash', note })
-                          }}
-                          className="min-h-11 px-2 text-[#0066cc] hover:underline"
-                        >
-                          Buang
-                        </button>
+                        {note.user_id === user.id ? (
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setConfirmation({ action: 'trash', note })
+                            }}
+                            className="min-h-11 px-2 text-[#0066cc] hover:underline"
+                          >
+                            Buang
+                          </button>
+                        ) : (
+                          <span className="px-2 text-[12px] text-[#7a7a7a]">Dibagikan</span>
+                        )}
                       </div>
                     </div>
                   </article>
@@ -711,6 +1246,81 @@ export default function Home() {
                 </button>
               </div>
             </section>
+          </div>
+        )}
+
+        {isSettingsOpen && (
+          <div
+            className="fixed inset-0 z-[65] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px] animate-modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setIsSettingsOpen(false)
+            }}
+          >
+            <form
+              onSubmit={handleSaveSettings}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="account-settings-title"
+              className="w-full max-w-[520px] max-h-[min(82vh,720px)] overflow-y-auto rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-8 animate-modal-enter"
+            >
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div>
+                  <h2 id="account-settings-title" className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">Pengaturan Akun</h2>
+                  <p className="mt-2 text-[14px] text-[#7a7a7a]">Kelola informasi profil dan keamanan akun.</p>
+                </div>
+                <button type="button" aria-label="Tutup pengaturan" onClick={() => setIsSettingsOpen(false)} className="flex h-11 w-11 items-center justify-center rounded-full text-[24px] text-[#7a7a7a] hover:bg-[#f5f5f7] active:scale-95">×</button>
+              </div>
+
+              <div className="mb-6 flex items-center gap-4">
+                {(profile?.avatar_url || user.user_metadata?.avatar_url) ? (
+                  <Image src={profile?.avatar_url || user.user_metadata.avatar_url} alt="Foto profil" width={64} height={64} unoptimized className="h-16 w-16 rounded-full object-cover" />
+                ) : (
+                  <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#f5f5f7] text-[24px] text-[#1d1d1f]">{(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}</span>
+                )}
+                <label className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] active:scale-95">
+                  Ubah Foto
+                  <input type="file" accept="image/*" className="sr-only" onChange={handleAvatarUpload} />
+                </label>
+              </div>
+
+              <label className="mb-5 block text-[14px] text-[#333333]">
+                Nama pengguna
+                <input
+                  required
+                  maxLength={80}
+                  autoComplete="name"
+                  value={settingsName}
+                  onChange={(event) => setSettingsName(event.target.value)}
+                  className="mt-2 h-11 w-full rounded-[8px] border border-[#e0e0e0] bg-white px-3 text-[17px] text-[#1d1d1f] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
+                />
+              </label>
+
+              <p className="mb-5 text-[14px] text-[#7a7a7a]">Email: {user.email}</p>
+              {((user.app_metadata?.providers as string[] | undefined) ?? []).includes('email') ? (
+                <label className="block text-[14px] text-[#333333]">
+                  Password baru <span className="text-[#7a7a7a]">(opsional)</span>
+                  <span className="mt-2 flex h-11 items-center rounded-[8px] border border-[#e0e0e0] bg-white focus-within:ring-2 focus-within:ring-[#0071e3]">
+                    <input
+                      type={showSettingsPassword ? 'text' : 'password'}
+                      minLength={8}
+                      autoComplete="new-password"
+                      value={settingsPassword}
+                      onChange={(event) => setSettingsPassword(event.target.value)}
+                      className="h-full min-w-0 flex-1 bg-transparent px-3 text-[17px] text-[#1d1d1f] outline-none"
+                    />
+                    <button type="button" aria-label={showSettingsPassword ? 'Sembunyikan password' : 'Tampilkan password'} onClick={() => setShowSettingsPassword((visible) => !visible)} className="h-11 rounded-full px-3 text-[12px] text-[#0066cc] active:scale-95">{showSettingsPassword ? 'Sembunyikan' : 'Tampilkan'}</button>
+                  </span>
+                </label>
+              ) : (
+                <p className="rounded-[8px] bg-[#f5f5f7] p-3 text-[14px] leading-[1.47] text-[#7a7a7a]">Akun ini masuk dengan Google. Penggantian password dikelola melalui akun Google.</p>
+              )}
+
+              {settingsMessage && <p aria-live="polite" className="mt-4 text-[14px] text-[#1d1d1f]">{settingsMessage}</p>}
+              <div className="mt-7 flex justify-end gap-3">
+                <button type="button" onClick={() => setIsSettingsOpen(false)} className="min-h-11 rounded-full px-4 text-[14px] text-[#0066cc] hover:bg-[#f5f5f7] active:scale-95">Batal</button>
+                <button type="submit" disabled={isSettingsSaving} className="min-h-11 rounded-full bg-[#0066cc] px-5 text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95 disabled:opacity-60">{isSettingsSaving ? 'Menyimpan...' : 'Simpan'}</button>
+              </div>
+            </form>
           </div>
         )}
       </main>
