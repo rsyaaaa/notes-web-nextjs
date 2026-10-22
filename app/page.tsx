@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
-import { supabase } from '@/lib/supabaseClient'
+import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
 
 // Interface Data Catatan sesuai Skema Supabase
 interface Note {
@@ -42,7 +42,7 @@ interface NotePerson {
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(supabaseConfigReady)
   const [notes, setNotes] = useState<Note[]>([])
   const [activeTab, setActiveTab] = useState<'notes' | 'trash'>('notes')
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -230,6 +230,8 @@ export default function Home() {
 
   // 1. Inisialisasi Auth & Auth Listener
   useEffect(() => {
+    if (!supabaseConfigReady) return
+
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       setUser(session?.user ?? null)
@@ -841,6 +843,23 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-[#f5f5f7] flex items-center justify-center font-sans">
         <p className="text-[#1d1d1f] text-[17px] font-normal tracking-[-0.374px]">Memuat Notes...</p>
+      </main>
+    )
+  }
+
+  if (!supabaseConfigReady) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f5f5f7] px-5 py-10 font-sans text-[#1d1d1f]">
+        <section className="w-full max-w-[520px] rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-8">
+          <h1 className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">Konfigurasi Supabase belum tersedia</h1>
+          <p className="mt-3 text-[17px] leading-[1.47] text-[#7a7a7a]">
+            Tambahkan environment variables berikut pada Vercel untuk Production, Preview, dan Development, lalu redeploy.
+          </p>
+          <ul className="mt-5 space-y-2 text-[14px] text-[#1d1d1f]">
+            <li><code className="rounded-[5px] bg-[#f5f5f7] px-2 py-1">NEXT_PUBLIC_SUPABASE_URL</code></li>
+            <li><code className="rounded-[5px] bg-[#f5f5f7] px-2 py-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code></li>
+          </ul>
+        </section>
       </main>
     )
   }
