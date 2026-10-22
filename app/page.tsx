@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import type { User } from '@supabase/supabase-js'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabaseClient'
 
 // Interface Data Catatan sesuai Skema Supabase
@@ -16,8 +18,14 @@ interface Note {
   updated_at: string
 }
 
+interface NoteDraft {
+  title: string
+  content: string
+  accentColor: string
+}
+
 export default function Home() {
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [notes, setNotes] = useState<Note[]>([])
   const [activeTab, setActiveTab] = useState<'notes' | 'trash'>('notes')
@@ -28,6 +36,30 @@ export default function Home() {
   const [accentColor, setAccentColor] = useState('#ffffff')
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null)
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const [isFormClosing, setIsFormClosing] = useState(false)
+  const [lastSavedDraft, setLastSavedDraft] = useState<NoteDraft>({
+    title: '',
+    content: '',
+    accentColor: '#ffffff',
+  })
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [pinAnimation, setPinAnimation] = useState<{ id: number; pinning: boolean } | null>(null)
+  const [confirmation, setConfirmation] = useState<{ action: 'trash' | 'delete'; note: Note } | null>(null)
+
+  const fetchNotes = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('notes')
+      .select('*')
+      .eq('user_id', userId)
+      .order('is_pinned', { ascending: false })
+      .order('updated_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching notes:', error.message)
+    } else {
+      setNotes(data || [])
+    }
+  }
 
   // Options Accent Color khas Apple Soft Pastel
   const colorOptions = [
@@ -67,22 +99,6 @@ export default function Home() {
     }
   }, [])
 
-  // 2. Fetch Catatan milik User
-  const fetchNotes = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('notes')
-      .select('*')
-      .eq('user_id', userId)
-      .order('is_pinned', { ascending: false })
-      .order('updated_at', { ascending: false })
-
-    if (error) {
-      console.error('Error fetching notes:', error.message)
-    } else {
-      setNotes(data || [])
-    }
-  }
-
   // Auth Functions
   const handleGoogleLogin = async () => {
     await supabase.auth.signInWithOAuth({
@@ -100,10 +116,12 @@ export default function Home() {
   // 3. CRUD & Feature Handlers
   const handleSaveNote = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!user) return
     if (!title.trim() && !content.trim()) return
 
+    const draft = { title, content, accentColor }
+    let saveError = false
     if (editingNoteId) {
-      // Update Existing Note
       const { error } = await supabase
         .from('notes')
         .update({
@@ -113,59 +131,171 @@ export default function Home() {
           updated_at: new Date().toISOString(),
         })
         .eq('id', editingNoteId)
+        .eq('user_id', user.id)
 
-      if (!error && user) fetchNotes(user.id)
+      saveError = Boolean(error)
     } else {
-      // Create New Note
-      const { error } = await supabase.from('notes').insert([
-        {
-          user_id: user.id,
-          title,
-          content,
-          accent_color: accentColor,
-        },
-      ])
-
-      if (!error && user) fetchNotes(user.id)
+      const { error } = await supabase.from('notes').insert({
+        user_id: user.id,
+        title,
+        content,
+        accent_color: accentColor,
+      })
+      saveError = Boolean(error)
     }
 
-    // Reset Form
-    setTitle('')
-    setContent('')
-    setAccentColor('#ffffff')
+    if (saveError) {
+      setSaveStatus('error')
+      return
+    }
+
+    setLastSavedDraft(draft)
+    setSaveStatus('saved')
+    await fetchNotes(user.id)
+    closeNoteForm()
     setEditingNoteId(null)
-    setIsFormOpen(false)
   }
 
   const handleEditClick = (note: Note) => {
+    const draft = {
+      title: note.title,
+      content: note.content,
+      accentColor: note.accent_color || '#ffffff',
+    }
     setEditingNoteId(note.id)
-    setTitle(note.title)
-    setContent(note.content)
-    setAccentColor(note.accent_color || '#ffffff')
+    setTitle(draft.title)
+    setContent(draft.content)
+    setAccentColor(draft.accentColor)
+    setLastSavedDraft(draft)
+    setSaveStatus('idle')
     setIsFormOpen(true)
   }
 
+  const openNewNote = () => {
+    const emptyDraft = { title: '', content: '', accentColor: '#ffffff' }
+    setEditingNoteId(null)
+    setTitle(emptyDraft.title)
+    setContent(emptyDraft.content)
+    setAccentColor(emptyDraft.accentColor)
+    setLastSavedDraft(emptyDraft)
+    setSaveStatus('idle')
+    setIsFormOpen(true)
+  }
+
+  const closeNoteForm = useCallback(() => {
+    if (!isFormOpen || isFormClosing) return
+    setIsFormClosing(true)
+    window.setTimeout(() => {
+      setIsFormOpen(false)
+      setIsFormClosing(false)
+    }, 180)
+  }, [isFormClosing, isFormOpen])
+
+  useEffect(() => {
+    if (!isFormOpen || !user) return
+
+    const draft = { title, content, accentColor }
+    if (JSON.stringify(draft) === JSON.stringify(lastSavedDraft)) return
+
+    const timeout = window.setTimeout(async () => {
+      if (!draft.title.trim() && !draft.content.trim()) return
+      setSaveStatus('saving')
+
+      if (editingNoteId !== null) {
+        const { error } = await supabase
+          .from('notes')
+          .update({
+            title: draft.title,
+            content: draft.content,
+            accent_color: draft.accentColor,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editingNoteId)
+          .eq('user_id', user.id)
+
+        if (error) {
+          setSaveStatus('error')
+          return
+        }
+      } else {
+        const { data, error } = await supabase
+          .from('notes')
+          .insert({
+            user_id: user.id,
+            title: draft.title,
+            content: draft.content,
+            accent_color: draft.accentColor,
+          })
+          .select('id')
+          .single()
+
+        if (error || !data) {
+          setSaveStatus('error')
+          return
+        }
+        setEditingNoteId(data.id)
+      }
+
+      setLastSavedDraft(draft)
+      setSaveStatus('saved')
+      await fetchNotes(user.id)
+    }, 5000)
+
+    return () => window.clearTimeout(timeout)
+  }, [accentColor, content, editingNoteId, isFormOpen, lastSavedDraft, title, user])
+
+  useEffect(() => {
+    if (!isFormOpen && !confirmation) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeNoteForm()
+        setConfirmation(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [closeNoteForm, confirmation, isFormOpen, isFormClosing])
+
   const togglePin = async (note: Note) => {
+    if (!user) return
+    setPinAnimation({ id: note.id, pinning: !note.is_pinned })
+    window.setTimeout(() => setPinAnimation(null), 500)
     const { error } = await supabase
       .from('notes')
       .update({ is_pinned: !note.is_pinned, updated_at: new Date().toISOString() })
       .eq('id', note.id)
+      .eq('user_id', user.id)
 
-    if (!error && user) fetchNotes(user.id)
+    if (!error) fetchNotes(user.id)
   }
 
   const toggleTrash = async (note: Note) => {
+    if (!user) return
     const { error } = await supabase
       .from('notes')
       .update({ is_trashed: !note.is_trashed, updated_at: new Date().toISOString() })
       .eq('id', note.id)
+      .eq('user_id', user.id)
 
-    if (!error && user) fetchNotes(user.id)
+    if (!error) fetchNotes(user.id)
   }
 
-  const deletePermanently = async (id: number) => {
-    const { error } = await supabase.from('notes').delete().eq('id', id)
-    if (!error && user) fetchNotes(user.id)
+  const deletePermanently = async (note: Note) => {
+    if (!user) return
+    const { error } = await supabase
+      .from('notes')
+      .delete()
+      .eq('id', note.id)
+      .eq('user_id', user.id)
+    if (!error) fetchNotes(user.id)
+  }
+
+  const confirmDestructiveAction = async () => {
+    if (!confirmation) return
+    const { action, note } = confirmation
+    setConfirmation(null)
+    if (action === 'trash') await toggleTrash(note)
+    else await deletePermanently(note)
   }
 
   const formatDate = (dateStr: string) => {
@@ -213,8 +343,14 @@ export default function Home() {
           {/* Primary Blue Pill CTA */}
           <button
             onClick={handleGoogleLogin}
-            className="bg-[#0066cc] text-white text-[17px] font-normal px-[22px] py-[11px] rounded-full hover:bg-[#0071e3] active:scale-95 transition-all duration-150 shadow-sm"
+            className="flex items-center gap-3 bg-[#0066cc] text-white text-[17px] font-normal px-[22px] py-[11px] rounded-full hover:bg-[#0071e3] active:scale-95 transition-all duration-150"
           >
+            <svg aria-hidden="true" viewBox="0 0 48 48" className="h-5 w-5 rounded-full bg-white p-[3px]">
+              <path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5h6.6c3.9-3.6 6.1-8.8 6.1-14.9Z" />
+              <path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.6-5c-1.8 1.2-4.1 2-6.9 2-5.3 0-9.8-3.6-11.4-8.4H5.8v5.2A20 20 0 0 0 24 44Z" />
+              <path fill="#FBBC05" d="M12.6 27.8a12 12 0 0 1 0-7.6V15H5.8a20 20 0 0 0 0 18l6.8-5.2Z" />
+              <path fill="#EA4335" d="M24 11.8c3 0 5.7 1 7.8 3l5.8-5.8C34.1 5.7 29.5 4 24 4A20 20 0 0 0 5.8 15l6.8 5.2c1.6-4.8 6.1-8.4 11.4-8.4Z" />
+            </svg>
             Masuk dengan Google
           </button>
         </div>
@@ -224,7 +360,7 @@ export default function Home() {
 
   // --- 2. MAIN DASHBOARD PAGE (Apple Design System) ---
   return (
-    <div className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans flex flex-col selection:bg-[#0066cc] selection:text-white">
+    <div className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans flex flex-col selection:bg-[#0066cc] selection:text-white animate-dashboard-enter">
       {/* Global Thin Nav Bar */}
       <header className="h-[44px] bg-[#000000] text-white flex items-center justify-between px-6 md:px-12 text-[12px] tracking-[-0.12px] sticky top-0 z-50">
         <div className="flex items-center gap-2">
@@ -236,10 +372,13 @@ export default function Home() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             {user.user_metadata?.avatar_url && (
-              <img
+              <Image
                 src={user.user_metadata.avatar_url}
                 alt="Profile"
-                className="w-6 h-6 rounded-full border border-white/20 object-cover"
+                width={24}
+                height={24}
+                unoptimized
+                className="h-6 w-6 rounded-full border border-white/20 object-cover"
               />
             )}
             <span className="hidden sm:inline text-white/90 font-medium">
@@ -284,13 +423,10 @@ export default function Home() {
         {activeTab === 'notes' && (
           <button
             onClick={() => {
-              setEditingNoteId(null)
-              setTitle('')
-              setContent('')
-              setAccentColor('#ffffff')
-              setIsFormOpen(!isFormOpen)
+              if (isFormOpen) closeNoteForm()
+              else openNewNote()
             }}
-            className="bg-[#0066cc] text-white text-[14px] font-normal px-4 py-1.5 rounded-full hover:bg-[#0071e3] active:scale-95 transition-all shadow-sm"
+            className="bg-[#0066cc] text-white text-[14px] font-normal px-4 py-2 rounded-full hover:bg-[#0071e3] active:scale-95 transition-all"
           >
             {isFormOpen ? 'Tutup Form' : '+ Catatan Baru'}
           </button>
@@ -299,82 +435,128 @@ export default function Home() {
 
       {/* Content Area */}
       <main className="flex-1 max-w-[1440px] w-full mx-auto px-6 md:px-12 py-8">
-        {/* Form Modal / Inline Input (Apple Card) */}
+        {/* Note editor modal */}
         {isFormOpen && activeTab === 'notes' && (
-          <form
-            onSubmit={handleSaveNote}
-            style={{ backgroundColor: accentColor }}
-            className="mb-10 p-6 rounded-[18px] border border-[#e0e0e0] shadow-sm transition-all duration-200 max-w-2xl mx-auto"
+          <div
+            className={`fixed inset-0 z-[60] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px] ${isFormClosing ? 'animate-modal-backdrop-exit' : 'animate-modal-backdrop'}`}
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) closeNoteForm()
+            }}
           >
-            <h2 className="text-[17px] font-semibold mb-4 text-[#1d1d1f]">
-              {editingNoteId ? 'Edit Catatan' : 'Buat Catatan Baru'}
-            </h2>
-            <input
-              type="text"
-              placeholder="Judul Catatan..."
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full text-[17px] font-semibold bg-transparent border-b border-[#e0e0e0] pb-2 mb-4 focus:outline-none text-[#1d1d1f]"
-            />
-            <textarea
-              placeholder="Tulis isi catatan di sini..."
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={4}
-              className="w-full text-[17px] leading-[1.47] bg-transparent focus:outline-none text-[#1d1d1f] resize-none mb-4"
-            />
-
-            {/* Selection Accent Color */}
-            <div className="flex items-center justify-between border-t border-[#f0f0f0] pt-4">
-              <div className="flex items-center gap-2">
-                <span className="text-[12px] text-[#7a7a7a]">Aksen Warna:</span>
-                {colorOptions.map((c) => (
-                  <button
-                    key={c.value}
-                    type="button"
-                    onClick={() => setAccentColor(c.value)}
-                    style={{ backgroundColor: c.value }}
-                    className={`w-6 h-6 rounded-full border border-black/10 transition-all ${
-                      accentColor === c.value ? 'ring-2 ring-[#0066cc] scale-110' : ''
-                    }`}
-                  />
-                ))}
-              </div>
-
-              <div className="flex gap-2">
+            <form
+              onSubmit={handleSaveNote}
+              style={{ backgroundColor: accentColor }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="note-editor-title"
+              className={`w-full max-w-[680px] max-h-[min(82vh,760px)] overflow-y-auto p-6 sm:p-8 rounded-[18px] border border-[#e0e0e0] ${isFormClosing ? 'animate-modal-exit' : 'animate-modal-enter'}`}
+            >
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div>
+                  <h2 id="note-editor-title" className="text-[21px] leading-[1.2] font-semibold text-[#1d1d1f]">
+                    {editingNoteId ? 'Edit Catatan' : 'Buat Catatan Baru'}
+                  </h2>
+                  <p aria-live="polite" className="mt-2 min-h-5 text-[12px] text-[#7a7a7a]">
+                    {saveStatus === 'saving' && 'Menyimpan...'}
+                    {saveStatus === 'saved' && '✓ Autosave complete'}
+                    {saveStatus === 'error' && 'Gagal menyimpan. Periksa koneksi lalu coba lagi.'}
+                  </p>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setIsFormOpen(false)}
-                  className="px-4 py-1.5 rounded-full text-[14px] text-[#7a7a7a] hover:bg-black/5"
+                  aria-label="Tutup editor"
+                  onClick={closeNoteForm}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] text-[#7a7a7a] transition-colors hover:bg-black/5 active:scale-95"
                 >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="bg-[#0066cc] text-white px-5 py-1.5 rounded-full text-[14px] hover:bg-[#0071e3] active:scale-95 transition-all"
-                >
-                  Simpan
+                  ×
                 </button>
               </div>
-            </div>
-          </form>
+              <input
+                autoFocus
+                type="text"
+                placeholder="Judul Catatan..."
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value)
+                  setSaveStatus('idle')
+                }}
+                className="w-full border-b border-[#e0e0e0] bg-transparent pb-3 mb-5 text-[21px] font-semibold text-[#1d1d1f] focus:outline-none"
+              />
+              <textarea
+                placeholder="Tulis isi catatan di sini..."
+                value={content}
+                onChange={(e) => {
+                  setContent(e.target.value)
+                  setSaveStatus('idle')
+                }}
+                rows={10}
+                className="mb-6 min-h-[240px] w-full resize-y bg-transparent text-[17px] leading-[1.47] text-[#1d1d1f] focus:outline-none"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[#f0f0f0] pt-5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-[12px] text-[#7a7a7a]">Aksen warna</span>
+                  {colorOptions.map((color) => (
+                    <button
+                      key={color.value}
+                      type="button"
+                      aria-label={color.label}
+                      aria-pressed={accentColor === color.value}
+                      onClick={() => {
+                        setAccentColor(color.value)
+                        setSaveStatus('idle')
+                      }}
+                      style={{ backgroundColor: color.value }}
+                      className={`h-7 w-7 rounded-full border border-black/10 transition-transform active:scale-95 ${
+                        accentColor === color.value ? 'ring-2 ring-[#0066cc] ring-offset-2' : ''
+                      }`}
+                    />
+                  ))}
+                </div>
+                <div className="ml-auto flex gap-2">
+                  <button
+                    type="button"
+                    onClick={closeNoteForm}
+                    className="min-h-11 rounded-full px-4 text-[14px] text-[#7a7a7a] transition-colors hover:bg-black/5 active:scale-95"
+                  >
+                    Tutup
+                  </button>
+                  <button
+                    type="submit"
+                    className="min-h-11 rounded-full bg-[#0066cc] px-[22px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95"
+                  >
+                    Simpan
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
         )}
 
         {/* TAB 1: UTAMA (Active Notes) */}
         {activeTab === 'notes' && (
-          <div>
+          <div key="notes-tab" className="animate-tab-enter">
             {activeNotes.length === 0 ? (
               <div className="text-center py-20 text-[#7a7a7a]">
                 <p className="text-[21px] font-semibold mb-2">Belum ada catatan</p>
-                <p className="text-[17px]">Klik "+ Catatan Baru" di atas untuk mulai menulis.</p>
+                <p className="text-[17px]">Klik &quot;+ Catatan Baru&quot; di atas untuk mulai menulis.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {activeNotes.map((note) => (
-                  <div
+                  <article
                     key={note.id}
                     style={{ backgroundColor: note.accent_color || '#ffffff' }}
-                    className="relative group p-6 rounded-[18px] border border-[#e0e0e0] flex flex-col justify-between transition-all duration-200 hover:border-[#0066cc]/40"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Buka catatan ${note.title || 'Tanpa Judul'}`}
+                    onClick={() => handleEditClick(note)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        handleEditClick(note)
+                      }
+                    }}
+                    className="relative group flex cursor-pointer flex-col justify-between rounded-[18px] border border-[#e0e0e0] p-6 transition-all duration-200 hover:border-[#0066cc]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0071e3]"
                   >
                     <div>
                       <div className="flex items-start justify-between mb-2 gap-2">
@@ -383,14 +565,19 @@ export default function Home() {
                         </h3>
                         {/* Pin Button */}
                         <button
-                          onClick={() => togglePin(note)}
-                          className={`text-xs px-2 py-1 rounded-full transition-all ${
+                          aria-label={note.is_pinned ? 'Lepas pin catatan' : 'Pin catatan'}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            togglePin(note)
+                          }}
+                          className={`min-h-11 px-3 py-1 rounded-full text-xs transition-all ${
                             note.is_pinned
                               ? 'bg-[#0066cc] text-white'
-                              : 'bg-black/5 text-[#7a7a7a] opacity-0 group-hover:opacity-100'
-                          }`}
+                              : 'bg-black/5 text-[#7a7a7a] sm:opacity-0 sm:group-hover:opacity-100'
+                          } ${pinAnimation?.id === note.id ? (pinAnimation.pinning ? 'animate-pin-on' : 'animate-pin-off') : ''}`}
                         >
-                          {note.is_pinned ? '📌 Pinned' : 'Pin'}
+                          <span aria-hidden="true" className="mr-1 inline-block">{note.is_pinned ? '📌' : '⌖'}</span>
+                          {note.is_pinned ? 'Pinned' : 'Pin'}
                         </button>
                       </div>
 
@@ -407,20 +594,26 @@ export default function Home() {
 
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => handleEditClick(note)}
-                          className="text-[#0066cc] hover:underline"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleEditClick(note)
+                          }}
+                          className="min-h-11 px-2 text-[#0066cc] hover:underline"
                         >
                           Edit
                         </button>
                         <button
-                          onClick={() => toggleTrash(note)}
-                          className="text-red-500 hover:underline"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setConfirmation({ action: 'trash', note })
+                          }}
+                          className="min-h-11 px-2 text-[#0066cc] hover:underline"
                         >
                           Buang
                         </button>
                       </div>
                     </div>
-                  </div>
+                  </article>
                 ))}
               </div>
             )}
@@ -429,7 +622,7 @@ export default function Home() {
 
         {/* TAB 2: SAMPAH (Trashed Notes) */}
         {activeTab === 'trash' && (
-          <div>
+          <div key="trash-tab" className="animate-tab-enter">
             {trashedNotes.length === 0 ? (
               <div className="text-center py-20 text-[#7a7a7a]">
                 <p className="text-[21px] font-semibold mb-2">Tong sampah kosong</p>
@@ -461,8 +654,8 @@ export default function Home() {
                           Pulihkan
                         </button>
                         <button
-                          onClick={() => deletePermanently(note.id)}
-                          className="text-red-600 font-medium hover:underline"
+                          onClick={() => setConfirmation({ action: 'delete', note })}
+                          className="min-h-11 px-2 font-medium text-[#0066cc] hover:underline"
                         >
                           Hapus Permanen
                         </button>
@@ -472,6 +665,52 @@ export default function Home() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {confirmation && (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px] animate-modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setConfirmation(null)
+            }}
+          >
+            <section
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="confirmation-title"
+              aria-describedby="confirmation-description"
+              className="w-full max-w-[420px] rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-7 animate-confirm-enter"
+            >
+              <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-full bg-[#f5f5f7] text-[21px] font-semibold text-[#0066cc]" aria-hidden="true">
+                {confirmation.action === 'trash' ? '↘' : '×'}
+              </div>
+              <h2 id="confirmation-title" className="text-[21px] font-semibold leading-[1.2] tracking-[-0.2px] text-[#1d1d1f]">
+                {confirmation.action === 'trash' ? 'Pindahkan ke Tong Sampah?' : 'Hapus Catatan Permanen?'}
+              </h2>
+              <p id="confirmation-description" className="mt-3 text-[17px] leading-[1.47] text-[#1d1d1f]">
+                {confirmation.action === 'trash'
+                  ? `“${confirmation.note.title || 'Tanpa Judul'}” akan dipindahkan ke tong sampah. Kamu masih bisa memulihkannya nanti.`
+                  : `“${confirmation.note.title || 'Tanpa Judul'}” akan dihapus selamanya dan tidak dapat dipulihkan.`}
+              </p>
+              <div className="mt-7 flex justify-end gap-3">
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => setConfirmation(null)}
+                  className="min-h-11 rounded-full px-[18px] text-[14px] text-[#0066cc] transition-colors hover:bg-[#f5f5f7] active:scale-95"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDestructiveAction}
+                  className="min-h-11 rounded-full bg-[#0066cc] px-[20px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95"
+                >
+                  {confirmation.action === 'trash' ? 'Pindahkan' : 'Hapus Permanen'}
+                </button>
+              </div>
+            </section>
           </div>
         )}
       </main>

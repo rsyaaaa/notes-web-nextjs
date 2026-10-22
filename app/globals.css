@@ -24,3 +24,96 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-enter {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes confirm-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes dashboard-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes tab-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes modal-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes modal-exit {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(8px) scale(0.985); }
+}
+
+@keyframes pin-on {
+  0% { transform: rotate(-18deg) scale(0.7); }
+  55% { transform: rotate(12deg) scale(1.16); }
+  100% { transform: rotate(0) scale(1); }
+}
+
+@keyframes pin-off {
+  0% { transform: rotate(0) scale(1); }
+  45% { transform: rotate(-12deg) scale(0.9); }
+  100% { transform: rotate(18deg) scale(1); }
+}
+
+.animate-modal-backdrop {
+  animation: modal-backdrop-in 180ms ease-out both;
+}
+
+.animate-modal-enter {
+  animation: modal-enter 220ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.animate-confirm-enter {
+  animation: confirm-enter 200ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.animate-dashboard-enter {
+  animation: dashboard-enter 360ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.animate-tab-enter {
+  animation: tab-enter 220ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.animate-modal-backdrop-exit {
+  animation: modal-backdrop-out 180ms ease-in both;
+}
+
+.animate-modal-exit {
+  animation: modal-exit 180ms ease-in both;
+}
+
+.animate-pin-on {
+  animation: pin-on 420ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+.animate-pin-off {
+  animation: pin-off 360ms ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
