@@ -929,7 +929,7 @@ export default function Home() {
           <span className="font-semibold text-sm"> Notes</span>
           <span>Catatan pribadimu</span>
         </header>
-        <div className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1120px] items-center justify-center gap-16 px-4 py-8 sm:px-6 sm:py-12 lg:justify-between">
+        <div data-auth-layout className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1120px] items-center justify-center gap-16 px-4 py-8 sm:px-6 sm:py-12 lg:justify-between">
           <section className="hidden max-w-[470px] lg:block">
             <h1 className="text-[56px] font-semibold leading-[1.07] tracking-[-0.374px]">
               Ruang tenang untuk semua idemu.
@@ -939,7 +939,7 @@ export default function Home() {
             </p>
           </section>
 
-          <section className="w-full max-w-[420px] rounded-[18px] border border-[#e0e0e0] bg-white p-5 sm:p-8">
+          <section data-auth-card className="w-full max-w-[420px] rounded-[18px] border border-[#e0e0e0] bg-white p-5 sm:p-8">
             <h1 className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">
               {authMode === 'login' ? 'Selamat datang kembali' : 'Buat akun Notes'}
             </h1>
@@ -1053,7 +1053,7 @@ export default function Home() {
   return (
     <div className={`min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans flex flex-col selection:bg-[#0066cc] selection:text-white animate-dashboard-enter ${isDarkMode ? 'theme-dark' : ''}`}>
       {/* Global Thin Nav Bar */}
-      <header className="sticky top-0 z-50 flex h-[44px] items-center justify-between gap-2 bg-[#000000] px-3 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
+      <header data-dashboard-header className="sticky top-0 z-50 flex h-[44px] items-center justify-between gap-2 bg-[#000000] px-3 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
           <span className="text-base"></span>
           <span className="font-semibold tracking-normal">Notes</span>
@@ -1138,7 +1138,7 @@ export default function Home() {
       </header>
 
       {/* Sub-Nav Frosted Glass */}
-      <nav className="sticky top-[44px] z-40 flex min-h-[52px] flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[#e0e0e0] bg-[#f5f5f7]/80 px-3 py-2 backdrop-blur-md sm:px-6 md:px-12">
+      <nav data-dashboard-nav className="sticky top-[44px] z-40 flex min-h-[52px] flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[#e0e0e0] bg-[#f5f5f7]/80 px-3 py-2 backdrop-blur-md sm:px-6 md:px-12">
         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-6">
           <span className="text-[18px] font-semibold tracking-[0.1px] text-[#1d1d1f] sm:text-[21px] sm:tracking-[0.231px]">
             {activeTab === 'notes' ? 'Catatan Saya' : 'Sampah'}
@@ -1177,7 +1177,7 @@ export default function Home() {
       </nav>
 
       {/* Content Area */}
-      <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 sm:py-8 md:px-12">
+      <main data-dashboard-main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 sm:py-8 md:px-12">
         {premiumMessage && (
           <div role="status" className="mb-5 flex items-center justify-between gap-4 rounded-[11px] border border-[#e0e0e0] bg-white px-4 py-3 text-[14px] text-[#1d1d1f]">
             <span>{premiumMessage}</span>

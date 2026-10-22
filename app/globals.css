@@ -25,6 +25,223 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+@media (max-width: 639px) {
+  html,
+  body {
+    width: 100%;
+    min-width: 320px;
+    overflow-x: clip;
+  }
+
+  [data-auth-card] {
+    padding: 18px !important;
+    border-radius: 14px !important;
+  }
+
+  [data-auth-layout] {
+    align-items: flex-start !important;
+    padding-block: 16px !important;
+  }
+
+  [data-auth-card] h1 {
+    font-size: 24px !important;
+    line-height: 1.18 !important;
+  }
+
+  [data-auth-card] > p {
+    margin-top: 6px !important;
+    font-size: 15px !important;
+  }
+
+  [data-auth-card] > div.mt-6 {
+    margin-top: 16px !important;
+  }
+
+  [data-auth-card] form {
+    margin-top: 16px !important;
+  }
+
+  [data-auth-card] form > * + * {
+    margin-top: 12px !important;
+  }
+
+  [data-auth-card] label {
+    font-size: 13px !important;
+  }
+
+  [data-auth-card] input {
+    font-size: 16px !important;
+  }
+
+  [data-auth-card] > div.my-5 {
+    margin-block: 14px !important;
+  }
+
+  [data-dashboard-header] {
+    padding-inline: 10px !important;
+  }
+
+  [data-dashboard-nav] {
+    align-items: stretch !important;
+    gap: 6px !important;
+    padding: 8px 12px !important;
+  }
+
+  [data-dashboard-nav] > div:first-child {
+    width: 100%;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  [data-dashboard-nav] > div:first-child > span {
+    font-size: 16px !important;
+    line-height: 1.2;
+  }
+
+  [data-dashboard-nav] > div:first-child > div {
+    gap: 4px !important;
+  }
+
+  [data-dashboard-nav] > div:first-child > div > button {
+    min-height: 36px !important;
+    padding-inline: 9px !important;
+    font-size: 11px !important;
+    white-space: nowrap;
+  }
+
+  [data-dashboard-nav] > button {
+    min-height: 38px !important;
+    align-self: flex-end;
+    padding-inline: 14px !important;
+    font-size: 12px !important;
+  }
+
+  [data-dashboard-main] {
+    padding: 16px 12px calc(20px + env(safe-area-inset-bottom)) !important;
+  }
+
+  [data-dashboard-main] [data-note-card] {
+    padding: 16px !important;
+    border-radius: 14px !important;
+  }
+
+  [data-note-card] h3 {
+    font-size: 16px !important;
+    line-height: 1.3 !important;
+  }
+
+  [data-note-card] p {
+    font-size: 15px !important;
+    line-height: 1.5 !important;
+    overflow-wrap: anywhere;
+  }
+
+  [data-note-card] > div:last-child {
+    font-size: 11px !important;
+  }
+
+  [data-note-card] button {
+    min-height: 40px;
+  }
+
+  [data-note-editor] {
+    width: calc(100vw - 16px) !important;
+    max-width: 600px !important;
+    max-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important;
+    padding: 14px !important;
+    border-radius: 14px !important;
+  }
+
+  [data-note-editor] #note-editor-title {
+    font-size: 19px !important;
+    line-height: 1.25 !important;
+  }
+
+  [data-note-editor] textarea {
+    min-height: 130px !important;
+    margin-bottom: 16px !important;
+    font-size: 16px !important;
+  }
+
+  [data-note-editor] [aria-label="Kolaborator catatan"] {
+    margin-bottom: 16px !important;
+    padding-top: 14px !important;
+  }
+
+  [data-note-editor] [aria-label="Kolaborator catatan"] input {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  [data-note-editor] [aria-label="Kolaborator catatan"] button {
+    margin-left: auto;
+  }
+
+  [data-note-editor] [class*="border-t"] {
+    row-gap: 10px;
+  }
+
+  [role="dialog"],
+  [role="alertdialog"] {
+    max-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important;
+    padding: 18px !important;
+    border-radius: 14px !important;
+  }
+
+  [role="dialog"] h2,
+  [role="alertdialog"] h2 {
+    font-size: 22px !important;
+    line-height: 1.2 !important;
+  }
+
+  [role="dialog"] p,
+  [role="alertdialog"] p {
+    font-size: 15px !important;
+    line-height: 1.5 !important;
+  }
+
+  [role="dialog"] ul {
+    font-size: 15px !important;
+  }
+
+  [data-dashboard-main] .grid {
+    gap: 12px !important;
+  }
+}
+
+@media (max-width: 359px) {
+  [data-auth-layout] {
+    padding-inline: 12px !important;
+    padding-block: 10px !important;
+  }
+
+  [data-auth-card] {
+    padding: 15px !important;
+  }
+
+  [data-auth-card] h1 {
+    font-size: 22px !important;
+  }
+
+  [data-dashboard-header] > div:first-child {
+    gap: 4px !important;
+  }
+
+  [data-dashboard-header] > div:first-child > button {
+    padding-inline: 6px !important;
+    font-size: 9px !important;
+  }
+
+  [data-dashboard-nav] > div:first-child > div > button {
+    padding-inline: 7px !important;
+    font-size: 10px !important;
+  }
+
+  [data-note-editor] {
+    padding: 12px !important;
+  }
+}
+
 :root[data-theme="dark"] {
   color-scheme: dark;
   scrollbar-color: #55555b #171719;
