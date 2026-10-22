@@ -30,6 +30,7 @@ interface UserProfile {
   full_name: string
   avatar_url: string | null
   plan: 'free' | 'premium'
+  premium_expires_at: string | null
 }
 
 interface NotePerson {
@@ -44,6 +45,13 @@ export default function Home() {
   const [notes, setNotes] = useState<Note[]>([])
   const [activeTab, setActiveTab] = useState<'notes' | 'trash'>('notes')
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [isPremiumOfferOpen, setIsPremiumOfferOpen] = useState(false)
+  const [offerMessage, setOfferMessage] = useState('')
+  const [isActivatingPremium, setIsActivatingPremium] = useState(false)
+  const [premiumSuccessExpiry, setPremiumSuccessExpiry] = useState<string | null>(null)
+  const [premiumDetailOpen, setPremiumDetailOpen] = useState(false)
+  const [lastOfferUserId, setLastOfferUserId] = useState<string | null>(null)
+  const [currentTime, setCurrentTime] = useState(0)
   const [folders, setFolders] = useState<{ id: number; name: string }[]>([])
   const [folderFilter, setFolderFilter] = useState('all')
   const [selectedFolderId, setSelectedFolderId] = useState('')
@@ -117,10 +125,10 @@ export default function Home() {
     }
   }
 
-  const fetchProfile = async (currentUser: User) => {
+  const fetchProfile = useCallback(async (currentUser: User) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('full_name, avatar_url, plan')
+      .select('full_name, avatar_url, plan, premium_expires_at')
       .eq('id', currentUser.id)
       .maybeSingle()
 
@@ -133,10 +141,18 @@ export default function Home() {
       full_name: currentUser.user_metadata?.full_name ?? currentUser.user_metadata?.name ?? '',
       avatar_url: currentUser.user_metadata?.avatar_url ?? null,
       plan: 'free',
+      premium_expires_at: null,
     }
     setProfile(nextProfile)
     setSettingsName(nextProfile.full_name)
-  }
+    const hasActivePremium = nextProfile.plan === 'premium'
+      && Boolean(nextProfile.premium_expires_at)
+      && new Date(nextProfile.premium_expires_at as string).getTime() > Date.now()
+    if (!hasActivePremium && lastOfferUserId !== currentUser.id) {
+      setLastOfferUserId(currentUser.id)
+      setIsPremiumOfferOpen(true)
+    }
+  }, [lastOfferUserId])
 
   const fetchFolders = async (userId: string) => {
     const { data, error } = await supabase
@@ -183,6 +199,7 @@ export default function Home() {
         setNotes([])
         setProfile(null)
         setFolders([])
+        setLastOfferUserId(null)
       }
       setLoading(false)
     })
@@ -190,7 +207,7 @@ export default function Home() {
     return () => {
       authListener.subscription.unsubscribe()
     }
-  }, [])
+  }, [fetchProfile])
 
   // Auth Functions
   const handleGoogleLogin = async () => {
@@ -295,7 +312,7 @@ export default function Home() {
 
   const createFolder = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!user || profile?.plan !== 'premium' || !folderName.trim()) return
+    if (!user || !isPremium || !folderName.trim()) return
     const { error } = await supabase.from('note_folders').insert({ user_id: user.id, name: folderName.trim() })
     if (error) setPremiumMessage(error.message)
     else {
@@ -307,7 +324,7 @@ export default function Home() {
 
   const inviteCollaborator = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!user || !editingNoteId || profile?.plan !== 'premium') return
+    if (!user || !editingNoteId || !isPremium) return
     setSharingMessage('Mengirim undangan...')
     const { data, error } = await supabase.rpc('invite_note_collaborator', {
       target_note_id: editingNoteId,
@@ -413,6 +430,11 @@ export default function Home() {
       setIsFormClosing(false)
     }, 180)
   }, [isFormClosing, isFormOpen])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setCurrentTime(Date.now()), 0)
+    return () => window.clearTimeout(timeout)
+  }, [])
 
   useEffect(() => {
     currentDraftRef.current = { title, content, accentColor, folderId: selectedFolderId }
@@ -565,20 +587,35 @@ export default function Home() {
   }, [editingNoteId, isFormOpen])
 
   useEffect(() => {
-    if (!isFormOpen && !confirmation) return
+    if (!isFormOpen && !confirmation && !isPremiumOfferOpen && !premiumDetailOpen && !isSettingsOpen) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         closeNoteForm()
         setConfirmation(null)
+        setIsPremiumOfferOpen(false)
+        setPremiumDetailOpen(false)
+        setIsSettingsOpen(false)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [closeNoteForm, confirmation, isFormOpen, isFormClosing])
+  }, [closeNoteForm, confirmation, isFormOpen, isFormClosing, isPremiumOfferOpen, premiumDetailOpen, isSettingsOpen])
+
+  useEffect(() => {
+    const expiresAt = profile?.premium_expires_at
+    if (!expiresAt) return
+    const delay = new Date(expiresAt).getTime() - Date.now()
+    if (delay <= 0) {
+      const timeout = window.setTimeout(() => setCurrentTime(Date.now()), 0)
+      return () => window.clearTimeout(timeout)
+    }
+    const timeout = window.setTimeout(() => setCurrentTime(Date.now()), delay + 50)
+    return () => window.clearTimeout(timeout)
+  }, [profile?.premium_expires_at])
 
   const togglePin = async (note: Note) => {
     if (!user) return
-    if (!note.is_pinned && note.user_id === user.id && profile?.plan !== 'premium') {
+    if (!note.is_pinned && note.user_id === user.id && !isPremium) {
       const currentPinnedCount = notes.filter((item) => item.user_id === user.id && item.is_pinned && !item.is_trashed).length
       if (currentPinnedCount >= 3) {
         setPremiumMessage('Paket Free memiliki batas 3 catatan pin. Premium membuka pin tanpa batas.')
@@ -639,6 +676,37 @@ export default function Home() {
   // Filter Notes berdasarkan Tab
   const activeNotes = notes.filter((n) => !n.is_trashed && (folderFilter === 'all' || String(n.folder_id ?? '') === folderFilter))
   const trashedNotes = notes.filter((n) => n.is_trashed)
+  const isPremium = profile?.plan === 'premium'
+    && Boolean(profile.premium_expires_at)
+    && new Date(profile.premium_expires_at as string).getTime() > currentTime
+
+  const openPlanDetails = () => {
+    if (isPremium) setPremiumDetailOpen(true)
+    else setIsPremiumOfferOpen(true)
+  }
+
+  const activatePremiumPlan = async (durationMonths: 1 | 12) => {
+    setIsActivatingPremium(true)
+    setOfferMessage('')
+    const { data, error } = await supabase.rpc('activate_premium_plan', {
+      duration_months: durationMonths,
+    })
+
+    if (error || !data) {
+      setOfferMessage(error?.message || 'Paket belum dapat diaktifkan. Coba lagi.')
+      setIsActivatingPremium(false)
+      return
+    }
+
+    const expiresAt = typeof data === 'string' ? data : String(data)
+    setPremiumSuccessExpiry(expiresAt)
+    setCurrentTime(Date.now())
+    setOfferMessage('')
+    setIsPremiumOfferOpen(false)
+    setPremiumDetailOpen(false)
+    if (user) await fetchProfile(user)
+    setIsActivatingPremium(false)
+  }
 
   if (loading) {
     return (
@@ -769,9 +837,13 @@ export default function Home() {
         <div className="flex items-center gap-2">
           <span className="text-base"></span>
           <span className="font-semibold tracking-normal">Notes</span>
-          <span className={`ml-1 rounded-full px-2 py-1 text-[10px] tracking-normal ${profile?.plan === 'premium' ? 'bg-[#0066cc] text-white' : 'bg-white/10 text-white/80'}`}>
-            {profile?.plan === 'premium' ? '★ Premium' : 'Free Plan'}
-          </span>
+          <button
+            type="button"
+            onClick={openPlanDetails}
+            className={`ml-1 min-h-8 rounded-full px-2 text-[10px] tracking-normal transition-colors active:scale-95 ${isPremium ? 'bg-[#0066cc] text-white' : 'bg-white/10 text-white/80'}`}
+          >
+            {isPremium ? '★ Premium' : 'Free Plan'}
+          </button>
         </div>
 
         {/* Google Profile Header (Ujung Kanan) */}
@@ -807,6 +879,9 @@ export default function Home() {
               <div className="border-b border-[#f0f0f0] px-3 py-2">
                 <p className="truncate text-[14px] font-semibold">{profile?.full_name || 'Akun Notes'}</p>
                 <p className="truncate text-[12px] text-[#7a7a7a]">{user.email}</p>
+                <button onClick={openPlanDetails} className="mt-2 min-h-8 rounded-full bg-[#f5f5f7] px-3 text-[12px] text-[#1d1d1f] active:scale-95">
+                  Paket aktif: {isPremium ? '★ Premium' : 'Free Plan'}
+                </button>
               </div>
               <button
                 role="menuitem"
@@ -877,7 +952,7 @@ export default function Home() {
           </div>
         )}
 
-        {activeTab === 'notes' && profile?.plan === 'premium' && (
+        {activeTab === 'notes' && isPremium && (
           <div className="mb-6 flex flex-wrap items-center gap-3">
             <label className="sr-only" htmlFor="folder-filter">Filter folder</label>
             <select
@@ -968,7 +1043,7 @@ export default function Home() {
                 rows={10}
                 className="mb-6 min-h-[240px] w-full resize-y bg-transparent text-[17px] leading-[1.47] text-[#1d1d1f] focus:outline-none"
               />
-              {(profile?.plan === 'premium' || notes.find((item) => item.id === editingNoteId)?.user_id !== user.id) && editingNoteId !== null && (
+              {(isPremium || notes.find((item) => item.id === editingNoteId)?.user_id !== user.id) && editingNoteId !== null && (
                 <section className="mb-6 border-t border-[#f0f0f0] pt-5" aria-label="Kolaborator catatan">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -1027,7 +1102,7 @@ export default function Home() {
                     />
                   ))}
                 </div>
-                {profile?.plan === 'premium' && (
+                {isPremium && (
                   <label className="flex items-center gap-2 text-[12px] text-[#7a7a7a]">
                     Folder
                     <select
@@ -1321,6 +1396,110 @@ export default function Home() {
                 <button type="submit" disabled={isSettingsSaving} className="min-h-11 rounded-full bg-[#0066cc] px-5 text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95 disabled:opacity-60">{isSettingsSaving ? 'Menyimpan...' : 'Simpan'}</button>
               </div>
             </form>
+          </div>
+        )}
+
+        {isPremiumOfferOpen && (
+          <div
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px] animate-modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setIsPremiumOfferOpen(false)
+                setOfferMessage('')
+              }
+            }}
+          >
+            <section role="dialog" aria-modal="true" aria-labelledby="premium-offer-title" className="w-full max-w-[560px] max-h-[min(86vh,760px)] overflow-y-auto rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-8 animate-modal-enter">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="mb-2 text-[12px] font-semibold text-[#0066cc]">NOTES PREMIUM</p>
+                  <h2 id="premium-offer-title" className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">Lebih banyak ruang untuk ide.</h2>
+                  <p className="mt-2 text-[17px] leading-[1.47] text-[#7a7a7a]">Pilih paket untuk langsung mengaktifkan Premium. Pembayaran belum diproses di aplikasi ini.</p>
+                </div>
+                <button type="button" aria-label="Tutup penawaran Premium" onClick={() => { setIsPremiumOfferOpen(false); setOfferMessage('') }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] text-[#7a7a7a] hover:bg-[#f5f5f7] active:scale-95">×</button>
+              </div>
+
+              <ul className="mt-6 space-y-3 text-[17px] leading-[1.47] text-[#1d1d1f]">
+                <li className="flex gap-3"><span className="text-[#0066cc]">✓</span><span>Folder untuk mengelompokkan catatan</span></li>
+                <li className="flex gap-3"><span className="text-[#0066cc]">✓</span><span>Berbagi dan mengedit catatan bersama kolaborator</span></li>
+                <li className="flex gap-3"><span className="text-[#0066cc]">✓</span><span>Pin catatan tanpa batas</span></li>
+              </ul>
+
+              <div className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button type="button" disabled={isActivatingPremium} onClick={() => activatePremiumPlan(1)} className="min-h-[84px] rounded-[11px] border border-[#e0e0e0] px-4 py-3 text-left transition-colors hover:bg-[#fafafc] active:scale-[0.98] disabled:opacity-60">
+                  <span className="block text-[14px] text-[#7a7a7a]">1 bulan</span>
+                  <span className="mt-1 block text-[21px] font-semibold tracking-[-0.2px] text-[#1d1d1f]">Rp10.000</span>
+                </button>
+                <button type="button" disabled={isActivatingPremium} onClick={() => activatePremiumPlan(12)} className="min-h-[84px] rounded-[11px] border border-[#e0e0e0] px-4 py-3 text-left transition-colors hover:bg-[#fafafc] active:scale-[0.98] disabled:opacity-60">
+                  <span className="block text-[14px] text-[#7a7a7a]">1 tahun</span>
+                  <span className="mt-1 block text-[21px] font-semibold tracking-[-0.2px] text-[#1d1d1f]">Rp90.000</span>
+                </button>
+              </div>
+
+              {isActivatingPremium && <p role="status" className="mt-4 text-[14px] text-[#7a7a7a]">Mengaktifkan Premium...</p>}
+              {offerMessage && <p role="status" aria-live="polite" className="mt-4 rounded-[8px] bg-[#f5f5f7] p-3 text-[14px] leading-[1.47] text-[#1d1d1f]">{offerMessage}</p>}
+              <div className="mt-6 flex justify-end">
+                <button type="button" onClick={() => { setIsPremiumOfferOpen(false); setOfferMessage('') }} className="min-h-11 rounded-full bg-[#0066cc] px-[22px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95">Tutup</button>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {premiumDetailOpen && isPremium && (
+          <div
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px] animate-modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setPremiumDetailOpen(false)
+            }}
+          >
+            <section role="dialog" aria-modal="true" aria-labelledby="premium-detail-title" className="w-full max-w-[480px] rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-8 animate-modal-enter">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="mb-2 text-[12px] font-semibold text-[#0066cc]">★ PREMIUM AKTIF</p>
+                  <h2 id="premium-detail-title" className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">Paket Premium</h2>
+                </div>
+                <button type="button" aria-label="Tutup detail paket" onClick={() => setPremiumDetailOpen(false)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] text-[#7a7a7a] hover:bg-[#f5f5f7] active:scale-95">×</button>
+              </div>
+              <p className="mt-4 text-[17px] leading-[1.47] text-[#1d1d1f]">
+                {profile?.premium_expires_at
+                  ? `Masa Premium berakhir pada ${new Date(profile.premium_expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}.`
+                  : 'Tanggal berakhir Premium belum tercatat.'}
+              </p>
+              <ul className="mt-5 space-y-2 text-[14px] leading-[1.47] text-[#7a7a7a]">
+                <li>Folder catatan</li>
+                <li>Catatan bersama dan kolaborator</li>
+                <li>Pin catatan tanpa batas</li>
+              </ul>
+              <div className="mt-7 flex justify-end">
+                <button type="button" onClick={() => setPremiumDetailOpen(false)} className="min-h-11 rounded-full bg-[#0066cc] px-[22px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95">Tutup</button>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {premiumSuccessExpiry && (
+          <div
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px] animate-modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setPremiumSuccessExpiry(null)
+            }}
+          >
+            <section role="dialog" aria-modal="true" aria-labelledby="premium-success-title" className="w-full max-w-[480px] rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-8 animate-modal-enter">
+              <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-full bg-[#f5f5f7] text-[21px] text-[#0066cc]" aria-hidden="true">★</div>
+              <p className="mb-2 text-[12px] font-semibold text-[#0066cc]">PREMIUM AKTIF</p>
+              <h2 id="premium-success-title" className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">Akunmu sekarang Premium.</h2>
+              <p className="mt-3 text-[17px] leading-[1.47] text-[#1d1d1f]">
+                Premium aktif sampai {new Date(premiumSuccessExpiry).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}. Tidak ada pembayaran yang diproses.
+              </p>
+              <ul className="mt-5 space-y-2 text-[14px] leading-[1.47] text-[#7a7a7a]">
+                <li>Folder untuk mengelompokkan catatan</li>
+                <li>Berbagi dan mengedit catatan bersama kolaborator</li>
+                <li>Pin catatan tanpa batas</li>
+              </ul>
+              <div className="mt-7 flex justify-end">
+                <button type="button" onClick={() => setPremiumSuccessExpiry(null)} className="min-h-11 rounded-full bg-[#0066cc] px-[22px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95">Mulai gunakan Premium</button>
+              </div>
+            </section>
           </div>
         )}
       </main>
