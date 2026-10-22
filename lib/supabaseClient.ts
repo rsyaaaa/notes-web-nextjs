@@ -1,11 +1,25 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
+const configuredAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
 
-export const supabaseConfigReady = Boolean(supabaseUrl && supabaseAnonKey)
+const isValidSupabaseUrl = (value: string | undefined): value is string => {
+	if (!value) return false
+
+	try {
+		const parsedUrl = new URL(value)
+		return (parsedUrl.protocol === 'https:' || parsedUrl.protocol === 'http:') && Boolean(parsedUrl.hostname)
+	} catch {
+		return false
+	}
+}
+
+const validSupabaseUrl = isValidSupabaseUrl(configuredUrl) ? configuredUrl : undefined
+const validSupabaseAnonKey = validSupabaseUrl && configuredAnonKey ? configuredAnonKey : undefined
+
+export const supabaseConfigReady = Boolean(validSupabaseUrl && validSupabaseAnonKey)
 
 export const supabase = createClient(
-	supabaseUrl || 'https://missing-config.supabase.co',
-	supabaseAnonKey || 'missing-config-anon-key',
+	validSupabaseUrl ?? 'https://missing-config.supabase.co',
+	validSupabaseAnonKey ?? 'missing-config-anon-key',
 )
