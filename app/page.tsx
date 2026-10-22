@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabaseClient'
@@ -55,6 +56,8 @@ export default function Home() {
   const [folders, setFolders] = useState<{ id: number; name: string }[]>([])
   const [folderFilter, setFolderFilter] = useState('all')
   const [selectedFolderId, setSelectedFolderId] = useState('')
+  const [isFolderMenuOpen, setIsFolderMenuOpen] = useState(false)
+  const [folderMenuPosition, setFolderMenuPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null)
   const [folderName, setFolderName] = useState('')
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [premiumMessage, setPremiumMessage] = useState('')
@@ -64,6 +67,8 @@ export default function Home() {
   const [authPassword, setAuthPassword] = useState('')
   const [showAuthPassword, setShowAuthPassword] = useState(false)
   const [authMessage, setAuthMessage] = useState('')
+  const [verificationEmail, setVerificationEmail] = useState('')
+  const [isResendingVerification, setIsResendingVerification] = useState(false)
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false)
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
@@ -80,6 +85,8 @@ export default function Home() {
   const currentDraftRef = useRef<NoteDraft>({ title: '', content: '', accentColor: '#ffffff', folderId: '' })
   const savedDraftRef = useRef<NoteDraft>({ title: '', content: '', accentColor: '#ffffff', folderId: '' })
   const noteTitleInputRef = useRef<HTMLInputElement>(null)
+  const folderPickerButtonRef = useRef<HTMLButtonElement>(null)
+  const folderMenuRef = useRef<HTMLDivElement>(null)
 
   // State Form Catatan Baru / Edit
   const [title, setTitle] = useState('')
@@ -96,7 +103,10 @@ export default function Home() {
   })
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [pinAnimation, setPinAnimation] = useState<{ id: number; pinning: boolean } | null>(null)
-  const [confirmation, setConfirmation] = useState<{ action: 'trash' | 'delete'; note: Note } | null>(null)
+  const [confirmation, setConfirmation] = useState<{
+    action: 'trash' | 'delete' | 'deleteAll'
+    note?: Note
+  } | null>(null)
 
   useEffect(() => {
     const storedTheme = window.localStorage.getItem('notes-theme')
@@ -181,14 +191,42 @@ export default function Home() {
     if (!error) setFolders(data ?? [])
   }
 
-  // Options Accent Color khas Apple Soft Pastel
+  // Each accent keeps its saved light value and uses a coordinated surface in dark mode.
   const colorOptions = [
-    { label: 'White', value: '#ffffff' },
-    { label: 'Parchment', value: '#f5f5f7' },
-    { label: 'Soft Blue', value: '#e8f2ff' },
-    { label: 'Soft Amber', value: '#fff8e6' },
-    { label: 'Soft Mint', value: '#eafaf1' },
+    { label: 'White', value: '#ffffff', darkValue: '#272729' },
+    { label: 'Parchment', value: '#f5f5f7', darkValue: '#303033' },
+    { label: 'Soft Blue', value: '#e8f2ff', darkValue: '#26364a' },
+    { label: 'Sky', value: '#eaf6ff', darkValue: '#263949' },
+    { label: 'Soft Amber', value: '#fff8e6', darkValue: '#403721' },
+    { label: 'Soft Mint', value: '#eafaf1', darkValue: '#263d32' },
+    { label: 'Rose', value: '#fff0f2', darkValue: '#432d34' },
+    { label: 'Lavender', value: '#f2edff', darkValue: '#352f45' },
+    { label: 'Peach', value: '#fff0e6', darkValue: '#453329' },
+    { label: 'Teal', value: '#e6f7f7', darkValue: '#263d40' },
+    { label: 'Sage', value: '#edf4e8', darkValue: '#323c29' },
+    { label: 'Silver', value: '#eceff1', darkValue: '#30363b' },
   ]
+
+  const getAccentSurface = (value: string) =>
+    isDarkMode
+      ? colorOptions.find((option) => option.value.toLowerCase() === value.toLowerCase())?.darkValue ?? '#272729'
+      : value
+
+  const updateFolderMenuPosition = () => {
+    const button = folderPickerButtonRef.current
+    if (!button) return
+    const bounds = button.getBoundingClientRect()
+    const width = Math.min(Math.max(bounds.width, 220), window.innerWidth - 24)
+    const left = Math.max(12, Math.min(bounds.left, window.innerWidth - width - 12))
+    const availableAbove = bounds.top - 20
+    const availableBelow = window.innerHeight - bounds.bottom - 20
+    const opensAbove = availableAbove >= Math.min(208, availableBelow)
+    const maxHeight = Math.max(96, Math.min(208, opensAbove ? availableAbove - 8 : availableBelow - 8))
+    const top = opensAbove
+      ? Math.max(12, bounds.top - maxHeight - 8)
+      : Math.min(bounds.bottom + 8, window.innerHeight - maxHeight - 12)
+    setFolderMenuPosition({ top, left, width, maxHeight })
+  }
 
   // 1. Inisialisasi Auth & Auth Listener
   useEffect(() => {
@@ -241,6 +279,7 @@ export default function Home() {
     event.preventDefault()
     setIsAuthSubmitting(true)
     setAuthMessage('')
+    setVerificationEmail('')
 
     const result = authMode === 'register'
       ? await supabase.auth.signUp({
@@ -251,11 +290,35 @@ export default function Home() {
       : await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword })
 
     if (result.error) {
-      setAuthMessage(result.error.message)
+      const errorMessage = result.error.message
+      setAuthMessage(errorMessage.toLowerCase().includes('email rate limit exceeded')
+        ? 'Batas pengiriman email Supabase sedang tercapai. Permintaan daftar ini ditolak, jadi akun kemungkinan belum dibuat. Tunggu sampai batas pulih, lalu coba sekali lagi.'
+        : errorMessage)
     } else if (authMode === 'register' && !result.data.session) {
+      setVerificationEmail(authEmail.trim())
       setAuthMessage('Akun berhasil dibuat. Periksa email untuk konfirmasi sebelum masuk.')
     }
     setIsAuthSubmitting(false)
+  }
+
+  const resendSignupVerification = async () => {
+    const email = verificationEmail || authEmail.trim()
+    if (!email) {
+      setAuthMessage('Masukkan email yang digunakan saat mendaftar.')
+      return
+    }
+
+    setIsResendingVerification(true)
+    setAuthMessage('')
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/` },
+    })
+    setAuthMessage(error
+      ? `Email verifikasi belum dapat dikirim: ${error.message}`
+      : `Permintaan kirim ulang untuk ${email} berhasil. Periksa Inbox dan folder Spam.`)
+    setIsResendingVerification(false)
   }
 
   const handleLogout = async () => {
@@ -341,14 +404,16 @@ export default function Home() {
 
   const inviteCollaborator = async () => {
     if (!user || !editingNoteId || !isPremium) return
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim())) {
+    const email = inviteEmail.trim()
+    if (!email) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setSharingMessage('Masukkan alamat email yang valid.')
       return
     }
     setSharingMessage('Mengirim undangan...')
     const { data, error } = await supabase.rpc('invite_note_collaborator', {
       target_note_id: editingNoteId,
-      collaborator_email: inviteEmail,
+      collaborator_email: email,
     })
     if (error) {
       setSharingMessage(error.message)
@@ -516,6 +581,26 @@ export default function Home() {
   }, [accentColor, content, editingNoteId, isFormOpen, lastSavedDraft, selectedFolderId, title, user])
 
   useEffect(() => {
+    if (!isFolderMenuOpen) return
+    updateFolderMenuPosition()
+    const handleOutsideClick = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (!folderMenuRef.current?.contains(target) && !folderPickerButtonRef.current?.contains(target)) {
+        setIsFolderMenuOpen(false)
+      }
+    }
+    const handlePositionChange = () => updateFolderMenuPosition()
+    document.addEventListener('pointerdown', handleOutsideClick)
+    window.addEventListener('resize', handlePositionChange)
+    window.addEventListener('scroll', handlePositionChange, true)
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsideClick)
+      window.removeEventListener('resize', handlePositionChange)
+      window.removeEventListener('scroll', handlePositionChange, true)
+    }
+  }, [isFolderMenuOpen])
+
+  useEffect(() => {
     if (isFormOpen && editingNoteId !== null) {
       noteTitleInputRef.current?.setSelectionRange(0, 0)
       noteTitleInputRef.current?.scrollTo({ left: 0 })
@@ -531,9 +616,12 @@ export default function Home() {
     const loadMembers = async () => {
       const { data: memberRows } = await supabase
         .from('note_members')
-        .select('user_id')
+        .select('user_id, invited_by')
         .eq('note_id', editingNoteId)
-      const memberIds = [...new Set([user.id, ...(memberRows ?? []).map((member) => member.user_id)])]
+      const memberIds = [...new Set([
+        user.id,
+        ...(memberRows ?? []).flatMap((member) => [member.user_id, member.invited_by]),
+      ])]
       const { data: people } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url')
@@ -618,6 +706,7 @@ export default function Home() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         closeNoteForm()
+        setIsFolderMenuOpen(false)
         setConfirmation(null)
         setIsPremiumOfferOpen(false)
         setPremiumDetailOpen(false)
@@ -685,6 +774,18 @@ export default function Home() {
     if (!confirmation) return
     const { action, note } = confirmation
     setConfirmation(null)
+    if (action === 'deleteAll') {
+      if (!user) return
+      const { error } = await supabase
+        .from('notes')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('is_trashed', true)
+      if (error) setPremiumMessage(`Gagal menghapus catatan: ${error.message}`)
+      else await fetchNotes(user.id)
+      return
+    }
+    if (!note) return
     if (action === 'trash') await toggleTrash(note)
     else await deletePermanently(note)
   }
@@ -703,6 +804,7 @@ export default function Home() {
   // Filter Notes berdasarkan Tab
   const activeNotes = notes.filter((n) => !n.is_trashed && (folderFilter === 'all' || String(n.folder_id ?? '') === folderFilter))
   const trashedNotes = notes.filter((n) => n.is_trashed)
+  const ownedTrashedCount = trashedNotes.filter((note) => note.user_id === user?.id).length
   const isPremium = profile?.plan === 'premium'
     && Boolean(profile.premium_expires_at)
     && new Date(profile.premium_expires_at as string).getTime() > currentTime
@@ -828,6 +930,21 @@ export default function Home() {
                 </span>
               </label>
               {authMessage && <p role="status" className="text-[14px] leading-[1.4] text-[#1d1d1f]">{authMessage}</p>}
+              {verificationEmail && authMode === 'register' && (
+                <div className="space-y-2 rounded-[8px] bg-[#f5f5f7] p-3">
+                  <button
+                    type="button"
+                    disabled={isResendingVerification}
+                    onClick={resendSignupVerification}
+                    className="min-h-11 rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] transition-colors hover:bg-[#0066cc]/5 active:scale-95 disabled:opacity-60"
+                  >
+                    {isResendingVerification ? 'Mengirim...' : 'Kirim Ulang Email Verifikasi'}
+                  </button>
+                  <p className="text-[12px] leading-[1.45] text-[#7a7a7a]">
+                    Periksa Inbox dan folder Spam. Jika email tidak terkirim, proyek Supabase mungkin perlu SMTP khusus atau menunggu batas kirim pulih.
+                  </p>
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={isAuthSubmitting}
@@ -1036,7 +1153,7 @@ export default function Home() {
           >
             <form
               onSubmit={handleSaveNote}
-              style={{ backgroundColor: accentColor }}
+              style={{ backgroundColor: getAccentSurface(accentColor) }}
               data-note-editor
               role="dialog"
               aria-modal="true"
@@ -1088,11 +1205,15 @@ export default function Home() {
                 <section className="mb-6 border-t border-[#f0f0f0] pt-5" aria-label="Kolaborator catatan">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-[14px] font-semibold text-[#1d1d1f]">Akses bersama</h3>
+                      <h3 className="text-[14px] font-semibold text-[#1d1d1f]">
+                        {notes.find((item) => item.id === editingNoteId)?.user_id === user.id
+                          ? 'Akses bersama'
+                          : 'Notes ini adalah shared dari pembuat kolaborasi'}
+                      </h3>
                       <p className="mt-1 text-[12px] text-[#7a7a7a]">{onlineMembers.length ? `${onlineMembers.length} lainnya sedang membuka catatan` : 'Tidak ada kolaborator lain yang sedang aktif'}</p>
                     </div>
                     <div className="flex -space-x-2" aria-label="Pengguna yang mengakses catatan">
-                      {[...noteMembers.filter((person) => person.user_id === user.id), ...onlineMembers]
+                      {[...noteMembers, ...onlineMembers]
                         .filter((person, index, people) => people.findIndex((item) => item.user_id === person.user_id) === index)
                         .map((person) => (
                           <span key={person.user_id} title={person.full_name || person.user_id} className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#f5f5f7] text-[11px] text-[#1d1d1f]">
@@ -1110,7 +1231,6 @@ export default function Home() {
                     <div className="mt-4 flex flex-wrap gap-2">
                       <input
                         type="email"
-                        required
                         aria-label="Email kolaborator"
                         placeholder="Email akun Notes"
                         value={inviteEmail}
@@ -1136,28 +1256,38 @@ export default function Home() {
                         setAccentColor(color.value)
                         setSaveStatus('idle')
                       }}
-                      style={{ backgroundColor: color.value }}
+                      style={{ backgroundColor: getAccentSurface(color.value) }}
                       className={`h-7 w-7 rounded-full border border-black/10 transition-transform active:scale-95 ${
-                        accentColor === color.value ? 'ring-2 ring-[#0066cc] ring-offset-2' : ''
+                        accentColor === color.value
+                          ? `ring-2 ring-[#0066cc] ring-offset-2 ${isDarkMode ? 'ring-offset-[#252527]' : 'ring-offset-white'}`
+                          : ''
                       }`}
                     />
                   ))}
                 </div>
                 {isPremium && (
-                  <label className="flex items-center gap-2 text-[12px] text-[#7a7a7a]">
-                    Folder
-                    <select
-                      value={selectedFolderId}
-                      onChange={(event) => {
-                        setSelectedFolderId(event.target.value)
-                        setSaveStatus('idle')
-                      }}
-                      className="h-10 rounded-full border border-[#e0e0e0] bg-white px-3 text-[14px] text-[#1d1d1f] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
-                    >
-                      <option value="">Tanpa folder</option>
-                      {folders.map((folder) => <option key={folder.id} value={String(folder.id)}>{folder.name}</option>)}
-                    </select>
-                  </label>
+                  <div className="flex items-center gap-2 text-[12px] text-[#7a7a7a]">
+                    <span>Folder</span>
+                    <div className="relative">
+                      <button
+                        ref={folderPickerButtonRef}
+                        type="button"
+                        aria-haspopup="listbox"
+                        aria-expanded={isFolderMenuOpen}
+                        onClick={() => setIsFolderMenuOpen((open) => !open)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            setIsFolderMenuOpen(true)
+                          }
+                        }}
+                        className="flex h-11 max-w-[min(56vw,240px)] min-w-[130px] items-center justify-between gap-4 rounded-full border border-[#e0e0e0] bg-white px-4 text-left text-[14px] text-[#1d1d1f] transition-colors hover:bg-[#fafafc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0071e3]"
+                      >
+                        <span className="truncate">{folders.find((folder) => String(folder.id) === selectedFolderId)?.name ?? 'Tanpa folder'}</span>
+                        <span aria-hidden="true" className={`text-[11px] transition-transform ${isFolderMenuOpen ? 'rotate-180' : ''}`}>⌄</span>
+                      </button>
+                    </div>
+                  </div>
                 )}
                 <div className="ml-auto flex gap-2">
                   <button
@@ -1192,7 +1322,7 @@ export default function Home() {
                 {activeNotes.map((note) => (
                   <article
                     key={note.id}
-                    style={{ backgroundColor: note.accent_color || '#ffffff' }}
+                    style={{ backgroundColor: getAccentSurface(note.accent_color || '#ffffff') }}
                     data-note-card
                     role="button"
                     tabIndex={0}
@@ -1266,6 +1396,18 @@ export default function Home() {
         {/* TAB 2: SAMPAH (Trashed Notes) */}
         {activeTab === 'trash' && (
           <div key="trash-tab" className="animate-tab-enter">
+            {ownedTrashedCount > 0 && (
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-[14px] text-[#7a7a7a]">{ownedTrashedCount} catatan milikmu di tong sampah</p>
+                <button
+                  type="button"
+                  onClick={() => setConfirmation({ action: 'deleteAll' })}
+                  className="min-h-11 rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] transition-colors hover:bg-[#0066cc]/5 active:scale-95"
+                >
+                  Hapus Semua
+                </button>
+              </div>
+            )}
             {trashedNotes.length === 0 ? (
               <div className="text-center py-20 text-[#7a7a7a]">
                 <p className="text-[21px] font-semibold mb-2">Tong sampah kosong</p>
@@ -1276,6 +1418,7 @@ export default function Home() {
                 {trashedNotes.map((note) => (
                   <div
                     key={note.id}
+                    style={{ backgroundColor: getAccentSurface(note.accent_color || '#ffffff') }}
                     data-note-card
                     className="flex min-w-0 flex-col justify-between rounded-[18px] border border-[#e0e0e0] bg-[#ffffff] p-5 opacity-80 sm:p-6"
                   >
@@ -1312,6 +1455,40 @@ export default function Home() {
           </div>
         )}
 
+        {isFolderMenuOpen && folderMenuPosition && typeof document !== 'undefined' && createPortal(
+          <div
+            role="listbox"
+            aria-label="Pilih folder catatan"
+            data-folder-listbox
+            ref={folderMenuRef}
+            style={{
+              top: folderMenuPosition.top,
+              left: folderMenuPosition.left,
+              width: folderMenuPosition.width,
+              maxHeight: folderMenuPosition.maxHeight,
+            }}
+            className="fixed z-[100] max-h-52 overflow-y-auto rounded-[11px] border border-[#e0e0e0] bg-white p-1 text-[#1d1d1f]"
+          >
+            {[{ id: '', name: 'Tanpa folder' }, ...folders.map((folder) => ({ id: String(folder.id), name: folder.name }))].map((folder) => (
+              <button
+                key={folder.id || 'no-folder'}
+                type="button"
+                role="option"
+                aria-selected={selectedFolderId === folder.id}
+                onClick={() => {
+                  setSelectedFolderId(folder.id)
+                  setSaveStatus('idle')
+                  setIsFolderMenuOpen(false)
+                }}
+                className={`min-h-10 w-full rounded-full px-3 text-left text-[14px] transition-colors hover:bg-[#f5f5f7] ${selectedFolderId === folder.id ? 'text-[#0066cc]' : ''}`}
+              >
+                {folder.name}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+
         {confirmation && (
           <div
             className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] animate-modal-backdrop sm:p-4"
@@ -1330,12 +1507,18 @@ export default function Home() {
                 {confirmation.action === 'trash' ? '↘' : '×'}
               </div>
               <h2 id="confirmation-title" className="text-[21px] font-semibold leading-[1.2] tracking-[-0.2px] text-[#1d1d1f]">
-                {confirmation.action === 'trash' ? 'Pindahkan ke Tong Sampah?' : 'Hapus Catatan Permanen?'}
+                {confirmation.action === 'trash'
+                  ? 'Pindahkan ke Tong Sampah?'
+                  : confirmation.action === 'deleteAll'
+                    ? 'Hapus Semua Catatan Permanen?'
+                    : 'Hapus Catatan Permanen?'}
               </h2>
               <p id="confirmation-description" className="mt-3 text-[17px] leading-[1.47] text-[#1d1d1f]">
                 {confirmation.action === 'trash'
-                  ? `“${confirmation.note.title || 'Tanpa Judul'}” akan dipindahkan ke tong sampah. Kamu masih bisa memulihkannya nanti.`
-                  : `“${confirmation.note.title || 'Tanpa Judul'}” akan dihapus selamanya dan tidak dapat dipulihkan.`}
+                  ? `“${confirmation.note?.title || 'Tanpa Judul'}” akan dipindahkan ke tong sampah. Kamu masih bisa memulihkannya nanti.`
+                  : confirmation.action === 'deleteAll'
+                    ? `${ownedTrashedCount} catatan milikmu di tong sampah akan dihapus permanen dan tidak dapat dipulihkan.`
+                    : `“${confirmation.note?.title || 'Tanpa Judul'}” akan dihapus selamanya dan tidak dapat dipulihkan.`}
               </p>
               <div className="mt-6 flex flex-wrap justify-end gap-2 sm:mt-7 sm:gap-3">
                 <button
@@ -1351,7 +1534,11 @@ export default function Home() {
                   onClick={confirmDestructiveAction}
                   className="min-h-11 rounded-full bg-[#0066cc] px-[20px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95"
                 >
-                  {confirmation.action === 'trash' ? 'Pindahkan' : 'Hapus Permanen'}
+                  {confirmation.action === 'trash'
+                    ? 'Pindahkan'
+                    : confirmation.action === 'deleteAll'
+                      ? 'Hapus Semua'
+                      : 'Hapus Permanen'}
                 </button>
               </div>
             </section>

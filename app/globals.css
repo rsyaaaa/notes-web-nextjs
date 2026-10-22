@@ -112,8 +112,8 @@ body {
   background-color: #1d1d1f !important;
 }
 
-:root[data-theme="dark"] .theme-dark [class~="bg-[#ffffff]"],
-:root[data-theme="dark"] .theme-dark [class~="bg-white"] {
+:root[data-theme="dark"] .theme-dark [class~="bg-[#ffffff]"]:not([data-note-card]):not([data-note-editor]),
+:root[data-theme="dark"] .theme-dark [class~="bg-white"]:not([data-note-card]):not([data-note-editor]) {
   background-color: #252527 !important;
 }
 
@@ -152,7 +152,6 @@ body {
 }
 
 :root[data-theme="dark"] .theme-dark [data-note-card] {
-  background-color: #272729 !important;
   border-color: #454549 !important;
 }
 
@@ -167,7 +166,6 @@ body {
 }
 
 :root[data-theme="dark"] .theme-dark [data-note-editor] {
-  background-color: #252527 !important;
   border-color: #454549 !important;
   color: #f5f5f7 !important;
 }
@@ -190,6 +188,25 @@ body {
 :root[data-theme="dark"] .theme-dark [data-note-editor] input::placeholder,
 :root[data-theme="dark"] .theme-dark [data-note-editor] textarea::placeholder {
   color: #b3b3b8 !important;
+}
+
+:root[data-theme="dark"] [data-folder-listbox] {
+  border-color: #454549 !important;
+  background-color: #252527 !important;
+  color: #f5f5f7 !important;
+}
+
+:root[data-theme="dark"] [data-folder-listbox] [role="option"] {
+  color: #f5f5f7 !important;
+}
+
+:root[data-theme="dark"] [data-folder-listbox] [role="option"][aria-selected="true"] {
+  background-color: #303033 !important;
+  color: #2997ff !important;
+}
+
+:root[data-theme="dark"] [data-folder-listbox] [role="option"]:hover {
+  background-color: #303033 !important;
 }
 
 :root[data-theme="dark"] .theme-dark input,
