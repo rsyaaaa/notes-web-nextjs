@@ -1,10 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
+import AppleNoteLoader from '@/components/AppleNoteLoader'
 
 // Interface Data Catatan sesuai Skema Supabase
 interface Note {
@@ -41,6 +43,7 @@ interface NotePerson {
 }
 
 export default function Home() {
+  const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(supabaseConfigReady)
   const [notes, setNotes] = useState<Note[]>([])
@@ -108,6 +111,7 @@ export default function Home() {
     action: 'trash' | 'delete' | 'deleteAll'
     note?: Note
   } | null>(null)
+  const [openingNoteId, setOpeningNoteId] = useState<number | 'new' | null>(null)
 
   useEffect(() => {
     const storedTheme = window.localStorage.getItem('notes-theme')
@@ -575,6 +579,31 @@ export default function Home() {
     }, 180)
   }, [isFormClosing, isFormOpen])
 
+  const handleNoteCardClick = (note: Note) => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setOpeningNoteId(note.id)
+      router.push(`/notes/${note.id}`)
+    } else {
+      handleEditClick(note)
+    }
+  }
+
+  const handleNewNoteClick = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setOpeningNoteId('new')
+      router.push('/notes/new')
+    } else {
+      if (isFormOpen) closeNoteForm()
+      else openNewNote()
+    }
+  }
+
+  useEffect(() => {
+    const handlePageShow = () => setOpeningNoteId(null)
+    window.addEventListener('pageshow', handlePageShow)
+    return () => window.removeEventListener('pageshow', handlePageShow)
+  }, [])
+
   useEffect(() => {
     const timeout = window.setTimeout(() => setCurrentTime(Date.now()), 0)
     return () => window.clearTimeout(timeout)
@@ -896,11 +925,23 @@ export default function Home() {
     setIsActivatingPremium(false)
   }
 
-  if (loading) {
+  if (loading || openingNoteId !== null) {
     return (
-      <main className="min-h-screen bg-[#f5f5f7] flex items-center justify-center font-sans">
-        <p className="text-[#1d1d1f] text-[17px] font-normal tracking-[-0.374px]">Memuat Notes...</p>
-      </main>
+      <AppleNoteLoader
+        isDark={isDarkMode}
+        title={
+          openingNoteId === 'new'
+            ? 'Membuat Catatan...'
+            : openingNoteId !== null
+            ? 'Membuka Catatan...'
+            : 'Memuat Notes...'
+        }
+        subtitle={
+          openingNoteId !== null
+            ? 'Menyiapkan ruang tenang untuk idemu'
+            : 'Menyiapkan catatanmu'
+        }
+      />
     )
   }
 
@@ -1165,13 +1206,11 @@ export default function Home() {
 
         {activeTab === 'notes' && (
           <button
-            onClick={() => {
-              if (isFormOpen) closeNoteForm()
-              else openNewNote()
-            }}
+            onClick={handleNewNoteClick}
             className="min-h-10 shrink-0 rounded-full bg-[#0066cc] px-3 text-[12px] font-normal text-white transition-all hover:bg-[#0071e3] active:scale-95 sm:px-4 sm:text-[14px]"
           >
-            {isFormOpen ? 'Tutup Form' : '+ Catatan Baru'}
+            <span className="sm:hidden">{isFormOpen ? 'Tutup' : '+ Baru'}</span>
+            <span className="hidden sm:inline">{isFormOpen ? 'Tutup Form' : '+ Catatan Baru'}</span>
           </button>
         )}
       </nav>
@@ -1403,11 +1442,11 @@ export default function Home() {
                     role="button"
                     tabIndex={0}
                     aria-label={`Buka catatan ${note.title || 'Tanpa Judul'}`}
-                    onClick={() => handleEditClick(note)}
+                    onClick={() => handleNoteCardClick(note)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault()
-                        handleEditClick(note)
+                        handleNoteCardClick(note)
                       }
                     }}
                     className="relative group flex min-w-0 cursor-pointer flex-col justify-between rounded-[18px] border border-[#e0e0e0] p-5 transition-all duration-200 hover:border-[#0066cc]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0071e3] sm:p-6"
@@ -1535,13 +1574,13 @@ export default function Home() {
                       <div className="flex flex-wrap gap-x-2 gap-y-1 self-end sm:self-auto sm:gap-3">
                         <button
                           onClick={() => toggleTrash(note)}
-                          className="text-[#0066cc] font-medium hover:underline"
+                          className="text-[#0066cc] font-normal hover:underline active:scale-95"
                         >
                           Pulihkan
                         </button>
                         <button
                           onClick={() => setConfirmation({ action: 'delete', note })}
-                          className="min-h-11 px-2 font-medium text-[#0066cc] hover:underline"
+                          className="min-h-11 px-2 font-normal text-[#0066cc] hover:underline active:scale-95"
                         >
                           Hapus Permanen
                         </button>

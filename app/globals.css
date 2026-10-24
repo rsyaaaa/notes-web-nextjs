@@ -8,21 +8,22 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", var(--font-inter), system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #1d1d1f;
+    --foreground: #ffffff;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 @media (max-width: 639px) {
@@ -82,23 +83,28 @@ body {
   }
 
   [data-dashboard-nav] {
-    align-items: stretch !important;
+    min-height: 52px !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
     gap: 6px !important;
-    padding: 8px 12px !important;
+    padding: 6px 10px !important;
   }
 
   [data-dashboard-nav] > div:first-child {
-    width: 100%;
-    justify-content: space-between;
-    gap: 6px;
+    width: auto !important;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-wrap: nowrap !important;
+    justify-content: flex-start !important;
+    gap: 0 !important;
   }
 
   [data-dashboard-nav] > div:first-child > span {
-    font-size: 16px !important;
-    line-height: 1.2;
+    display: none;
   }
 
   [data-dashboard-nav] > div:first-child > div {
+    min-width: 0;
     gap: 4px !important;
   }
 
@@ -110,19 +116,32 @@ body {
   }
 
   [data-dashboard-nav] > button {
-    min-height: 38px !important;
-    align-self: flex-end;
-    padding-inline: 14px !important;
-    font-size: 12px !important;
+    min-height: 36px !important;
+    align-self: center;
+    padding-inline: 10px !important;
+    font-size: 11px !important;
+    white-space: nowrap;
   }
 
   [data-dashboard-main] {
-    padding: 16px 12px calc(20px + env(safe-area-inset-bottom)) !important;
+    padding: 10px 10px calc(16px + env(safe-area-inset-bottom)) !important;
+  }
+
+  [data-dashboard-main] > .mb-6:has(> select#folder-filter) {
+    margin-bottom: 10px !important;
+    gap: 8px !important;
+  }
+
+  [data-dashboard-main] > .mb-6:has(> select#folder-filter) select,
+  [data-dashboard-main] > .mb-6:has(> select#folder-filter) > button {
+    min-height: 38px !important;
+    height: 38px !important;
+    font-size: 12px !important;
   }
 
   [data-dashboard-main] [data-note-card] {
-    padding: 16px !important;
-    border-radius: 14px !important;
+    padding: 14px !important;
+    border-radius: 12px !important;
   }
 
   [data-note-card] h3 {
@@ -131,8 +150,9 @@ body {
   }
 
   [data-note-card] p {
-    font-size: 15px !important;
-    line-height: 1.5 !important;
+    font-size: 14px !important;
+    line-height: 1.42 !important;
+    margin-bottom: 12px !important;
     overflow-wrap: anywhere;
   }
 
@@ -237,6 +257,11 @@ body {
     font-size: 10px !important;
   }
 
+  [data-dashboard-nav] > button {
+    padding-inline: 8px !important;
+    font-size: 10px !important;
+  }
+
   [data-note-editor] {
     padding: 12px !important;
   }
@@ -338,7 +363,7 @@ body {
   background-color: #2a2a2c !important;
 }
 
-:root[data-theme="dark"] .theme-dark [class~="bg-[#1d1d1f]"] {
+:root[data-theme="dark"] .theme-dark button[class~="bg-[#1d1d1f]"]:not([data-no-invert]) {
   background-color: #d2d2d7 !important;
   color: #1d1d1f !important;
 }
@@ -518,6 +543,116 @@ body {
 
 .animate-pin-off {
   animation: pin-off 360ms ease-in-out;
+}
+
+/* Cute Apple Note Loader animations */
+@keyframes apple-pencil-glide {
+  0% {
+    transform: translate(0px, 0px) rotate(0deg);
+  }
+  25% {
+    transform: translate(12px, -3px) rotate(3deg);
+  }
+  50% {
+    transform: translate(24px, 2px) rotate(-2deg);
+  }
+  75% {
+    transform: translate(36px, -2px) rotate(3deg);
+  }
+  100% {
+    transform: translate(0px, 0px) rotate(0deg);
+  }
+}
+
+@keyframes apple-draw-stroke {
+  0% {
+    stroke-dashoffset: 70;
+    opacity: 0.2;
+  }
+  20% {
+    opacity: 1;
+  }
+  75% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  90% {
+    stroke-dashoffset: 0;
+    opacity: 0.9;
+  }
+  100% {
+    stroke-dashoffset: 70;
+    opacity: 0.2;
+  }
+}
+
+@keyframes apple-sparkle-pop {
+  0%, 65% {
+    transform: scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  78% {
+    transform: scale(1.25) rotate(45deg);
+    opacity: 1;
+  }
+  90% {
+    transform: scale(1) rotate(90deg);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(0) rotate(135deg);
+    opacity: 0;
+  }
+}
+
+@keyframes apple-memo-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes apple-dot-wave {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateY(-3.5px);
+    opacity: 1;
+  }
+}
+
+.animate-apple-pencil {
+  animation: apple-pencil-glide 2.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.animate-apple-stroke {
+  stroke-dasharray: 70;
+  animation: apple-draw-stroke 2.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.animate-apple-sparkle {
+  transform-origin: center;
+  animation: apple-sparkle-pop 2.4s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+}
+
+.animate-apple-memo {
+  animation: apple-memo-float 3s ease-in-out infinite;
+}
+
+.animate-apple-dot-1 {
+  animation: apple-dot-wave 1.4s ease-in-out infinite;
+}
+
+.animate-apple-dot-2 {
+  animation: apple-dot-wave 1.4s ease-in-out 0.2s infinite;
+}
+
+.animate-apple-dot-3 {
+  animation: apple-dot-wave 1.4s ease-in-out 0.4s infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
