@@ -54,14 +54,7 @@ const getSurfaceColor = (hex: string, isDark: boolean) => {
   return isDark ? '#1d1d1f' : hex
 }
 
-interface MemberQueryResult {
-  user_id: string
-  invited_by: string
-  profiles?: {
-    full_name?: string | null
-    avatar_url?: string | null
-  } | null
-}
+
 
 function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean }) {
   const params = useParams<{ id: string }>()
@@ -100,6 +93,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   // Related data
   const [folders, setFolders] = useState<NoteFolder[]>([])
   const [noteMembers, setNoteMembers] = useState<NotePerson[]>([])
+  const [ownerPerson, setOwnerPerson] = useState<NotePerson | null>(null)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteLoading, setInviteLoading] = useState(false)
   const [inviteMsg, setInviteMsg] = useState('')
@@ -121,7 +115,9 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
     const storedTheme = window.localStorage.getItem('notes-theme')
     const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches
     const shouldUseDark = storedTheme === 'dark' || (!storedTheme && prefersDark)
-    setIsDarkMode(shouldUseDark)
+    const frame = window.requestAnimationFrame(() => {
+      setIsDarkMode(shouldUseDark)
+    })
     document.documentElement.dataset.theme = shouldUseDark ? 'dark' : 'light'
 
     const handleStorage = (e: StorageEvent) => {
@@ -132,7 +128,58 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       }
     }
     window.addEventListener('storage', handleStorage)
-    return () => window.removeEventListener('storage', handleStorage)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [])
+
+  const collaboratorList = noteMembers.filter((m) => m.user_id !== noteOwnerId)
+
+  // Fetch collaborators separately to avoid invalid foreign key join in PostgREST
+  const fetchCollaborators = useCallback(async (targetNoteId: number) => {
+    try {
+      const { data: memberRows, error: memberError } = await supabase
+        .from('note_members')
+        .select('user_id, invited_by')
+        .eq('note_id', targetNoteId)
+
+      if (memberError) {
+        console.error('Error fetching note members:', memberError.message)
+        setNoteMembers([])
+        return
+      }
+
+      if (!memberRows || memberRows.length === 0) {
+        setNoteMembers([])
+        return
+      }
+
+      const userIds = [...new Set(memberRows.map((r) => r.user_id))]
+      const { data: profileRows, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', userIds)
+
+      if (profileError) {
+        console.error('Error fetching member profiles:', profileError.message)
+      }
+
+      const profileMap = new Map((profileRows || []).map((p) => [p.id, p]))
+      const mapped: NotePerson[] = memberRows.map((r) => {
+        const p = profileMap.get(r.user_id)
+        return {
+          user_id: r.user_id,
+          full_name: p?.full_name || 'Kolaborator',
+          avatar_url: p?.avatar_url || null,
+        }
+      })
+
+      setNoteMembers(mapped)
+    } catch (err) {
+      console.error('Failed to fetch collaborators:', err)
+      setNoteMembers([])
+    }
   }, [])
 
   // Auto-grow textarea height
@@ -186,6 +233,11 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       if (isNew) {
         if (!isMounted) return
         setNoteOwnerId(authUser.id)
+        setOwnerPerson({
+          user_id: authUser.id,
+          full_name: profileData?.full_name || authUser.user_metadata?.full_name || 'Saya',
+          avatar_url: profileData?.avatar_url || authUser.user_metadata?.avatar_url || null,
+        })
         setTitle('')
         setContent('')
         setAccentColor('#ffffff')
@@ -238,21 +290,30 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         folderId: fetchedNote.folder_id ? String(fetchedNote.folder_id) : '',
       }
 
-      // Fetch note collaborators
-      const { data: memberData } = await supabase
-        .from('note_members')
-        .select('user_id, invited_by, profiles:user_id(full_name, avatar_url)')
-        .eq('note_id', noteId)
-
-      if (isMounted && memberData) {
-        const rawRows = memberData as unknown as MemberQueryResult[]
-        const mappedMembers: NotePerson[] = rawRows.map((m) => ({
-          user_id: m.user_id,
-          full_name: m.profiles?.full_name || 'Kolaborator',
-          avatar_url: m.profiles?.avatar_url || null,
-        }))
-        setNoteMembers(mappedMembers)
+      // Fetch note owner profile
+      if (fetchedNote.user_id === authUser.id) {
+        setOwnerPerson({
+          user_id: authUser.id,
+          full_name: profileData?.full_name || authUser.user_metadata?.full_name || 'Saya',
+          avatar_url: profileData?.avatar_url || authUser.user_metadata?.avatar_url || null,
+        })
+      } else {
+        const { data: ownerData } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url')
+          .eq('id', fetchedNote.user_id)
+          .maybeSingle()
+        if (isMounted && ownerData) {
+          setOwnerPerson({
+            user_id: ownerData.id,
+            full_name: ownerData.full_name || 'Pemilik Catatan',
+            avatar_url: ownerData.avatar_url || null,
+          })
+        }
       }
+
+      // Fetch note collaborators
+      await fetchCollaborators(noteId)
 
       setLoading(false)
     }
@@ -262,7 +323,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
     return () => {
       isMounted = false
     }
-  }, [isNew, noteId, router])
+  }, [fetchCollaborators, isNew, noteId, router])
 
   // Realtime subscription for updates
   useEffect(() => {
@@ -288,12 +349,19 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           }
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'note_members', filter: `note_id=eq.${noteId}` },
+        () => {
+          fetchCollaborators(noteId)
+        }
+      )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [content, isNew, noteId, title])
+  }, [content, fetchCollaborators, isNew, noteId, title])
 
   // Save changes to Supabase
   const saveNote = useCallback(
@@ -452,19 +520,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       } else {
         setInviteMsg('Undangan berhasil dikirim!')
         setInviteEmail('')
-        const { data: memberData } = await supabase
-          .from('note_members')
-          .select('user_id, invited_by, profiles:user_id(full_name, avatar_url)')
-          .eq('note_id', noteId)
-        if (memberData) {
-          const rawRows = memberData as unknown as MemberQueryResult[]
-          const mappedMembers: NotePerson[] = rawRows.map((m) => ({
-            user_id: m.user_id,
-            full_name: m.profiles?.full_name || 'Kolaborator',
-            avatar_url: m.profiles?.avatar_url || null,
-          }))
-          setNoteMembers(mappedMembers)
-        }
+        await fetchCollaborators(noteId)
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Terjadi kesalahan'
@@ -473,6 +529,44 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       setInviteLoading(false)
     }
   }
+
+  // Remove collaborator
+  const handleRemoveCollaborator = async (targetUserId: string) => {
+    if (!noteId || !isOwner) return
+    const confirmed = window.confirm('Hapus kolaborator ini dari catatan?')
+    if (!confirmed) return
+
+    try {
+      const { error } = await supabase
+        .from('note_members')
+        .delete()
+        .eq('note_id', noteId)
+        .eq('user_id', targetUserId)
+
+      if (error) {
+        setInviteMsg(`Gagal: ${error.message}`)
+      } else {
+        await fetchCollaborators(noteId)
+        setInviteMsg('Kolaborator berhasil dihapus.')
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Terjadi kesalahan'
+      setInviteMsg(message)
+    }
+  }
+
+
+
+  // Close share modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showShareModal) {
+        setShowShareModal(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showShareModal])
 
   const handleBackToDashboard = async () => {
     isNavigatingAwayRef.current = true
@@ -727,7 +821,11 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                 aria-label="Kolaborator"
                 title="Kolaborator"
                 onClick={() => {
-                  setShowShareModal(!showShareModal)
+                  const nextState = !showShareModal
+                  setShowShareModal(nextState)
+                  if (nextState && noteId) {
+                    fetchCollaborators(noteId)
+                  }
                   setShowColorPicker(false)
                   setShowFolderPicker(false)
                 }}
@@ -738,7 +836,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                 }`}
               >
                 <span>👥</span>
-                {noteMembers.length > 0 && <span className="text-[12px] font-semibold">{noteMembers.length}</span>}
+                {collaboratorList.length > 0 && <span className="text-[12px] font-semibold">{collaboratorList.length}</span>}
               </button>
             )}
 
@@ -775,8 +873,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         </div>
       </nav>
 
-      {/* 3. Main Note Content Canvas (extra bottom padding pb-28 so floating dock never obscures text) */}
-      <main className="mx-auto flex w-full max-w-[980px] flex-1 flex-col px-4 py-6 pb-28 sm:px-8 sm:py-10 sm:pb-32">
+      {/* 3. Main Note Content Canvas (extra bottom padding pb-36 so floating dock never obscures text) */}
+      <main className="mx-auto flex w-full max-w-[980px] flex-1 flex-col px-4 py-6 pb-36 sm:px-8 sm:py-10 sm:pb-36">
         {/* Note Metadata Strip */}
         <div
           className={`mb-4 flex flex-wrap items-center justify-between gap-2 pb-3 text-[12px] tracking-[-0.12px] ${
@@ -886,120 +984,25 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           value={content}
           onChange={(e) => setContent(e.target.value)}
           placeholder="Tulis catatanmu di sini..."
-          className={`mt-4 w-full flex-1 resize-none bg-transparent text-[17px] font-normal leading-[1.47] tracking-[-0.374px] outline-none ${
+          className={`mt-4 w-full flex-1 resize-none bg-transparent pb-36 md:pb-12 text-[17px] font-normal leading-[1.47] tracking-[-0.374px] outline-none ${
             isDarkMode
               ? 'text-[#f5f5f7] placeholder-[#b3b3b8]/40'
               : 'text-[#1d1d1f] placeholder-[#7a7a7a]/40'
           }`}
         />
-
-        {/* Collaborators Floating Card / Tray */}
-        {showShareModal && (
-          <div
-            className={`mt-8 rounded-[18px] border p-5 sm:p-6 ${
-              isDarkMode ? 'border-[#3a3a3e] bg-[#252527] text-[#f5f5f7]' : 'border-[#e0e0e0] bg-white text-[#1d1d1f]'
-            }`}
-          >
-            <div
-              className={`flex items-center justify-between pb-3 border-b ${
-                isDarkMode ? 'border-[#3a3a3e]' : 'border-[#f0f0f0]'
-              }`}
-            >
-              <h3 className="text-[17px] font-semibold tracking-[-0.374px]">Kolaborasi Catatan</h3>
-              <button
-                type="button"
-                onClick={() => setShowShareModal(false)}
-                className={`text-[14px] active:scale-95 ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}
-              >
-                Tutup
-              </button>
-            </div>
-
-            {/* List of members */}
-            <div className="mt-4 space-y-3">
-              <p className={`text-[14px] ${isDarkMode ? 'text-[#b3b3b8]' : 'text-[#7a7a7a]'}`}>
-                Orang yang memiliki akses:
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {noteMembers.length === 0 ? (
-                  <p className={`text-[14px] ${isDarkMode ? 'text-[#b3b3b8]' : 'text-[#7a7a7a]'}`}>
-                    Belum ada kolaborator yang diundang.
-                  </p>
-                ) : (
-                  noteMembers.map((m) => (
-                    <div
-                      key={m.user_id}
-                      className={`flex items-center gap-2 rounded-full border px-3 py-1 text-[14px] ${
-                        isDarkMode
-                          ? 'border-[#3a3a3e] bg-[#1d1d1f] text-[#f5f5f7]'
-                          : 'border-[#e0e0e0] bg-[#f5f5f7] text-[#1d1d1f]'
-                      }`}
-                    >
-                      {m.avatar_url ? (
-                        <Image src={m.avatar_url} alt="" width={20} height={20} className="h-5 w-5 rounded-full object-cover" unoptimized />
-                      ) : (
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#0066cc] text-[10px] text-white">
-                          {(m.full_name || 'U').slice(0, 1).toUpperCase()}
-                        </span>
-                      )}
-                      <span>{m.full_name}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Invite Form */}
-            {isOwner && isPremium && (
-              <form onSubmit={handleInviteCollaborator} className="mt-6 flex flex-col sm:flex-row gap-2">
-                <input
-                  type="email"
-                  required
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="Masukkan email kolaborator"
-                  className={`h-11 flex-1 rounded-full border px-4 text-[14px] outline-none focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
-                    isDarkMode
-                      ? 'border-[#3a3a3e] bg-[#1d1d1f] text-[#f5f5f7] placeholder-[#b3b3b8]'
-                      : 'border-[#e0e0e0] bg-white text-[#1d1d1f] placeholder-[#7a7a7a]'
-                  }`}
-                />
-                <button
-                  type="submit"
-                  disabled={inviteLoading}
-                  className={`min-h-11 rounded-full px-5 text-[14px] font-normal text-white transition-transform active:scale-95 disabled:opacity-50 ${
-                    isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
-                  }`}
-                >
-                  {inviteLoading ? 'Mengundang...' : 'Undang'}
-                </button>
-              </form>
-            )}
-            {inviteMsg && (
-              <p className={`mt-2 text-[12px] ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>
-                {inviteMsg}
-              </p>
-            )}
-          </div>
-        )}
       </main>
 
-      {/* 4. Minimalist Apple Footer */}
-      <footer
-        className={`border-t px-4 py-6 text-center text-[12px] tracking-[-0.12px] transition-colors ${
-          isDarkMode
-            ? 'border-white/[0.06] bg-transparent text-[#86868b]'
-            : 'border-black/[0.05] bg-transparent text-[#7a7a7a]'
-        }`}
-      >
-        <span>Notes dibuat dengan presisi</span>
-      </footer>
 
       {/* 5. Floating Apple Liquid Glass Dock (Mobile View - ala dock liquid glass apple) */}
       <div
         role="toolbar"
         aria-label="Peralatan Catatan"
-        className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-40 md:hidden flex items-center gap-1 sm:gap-2 px-3 py-1.5 rounded-full backdrop-blur-2xl saturate-[190%] shadow-[0_8px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all ${
+        style={{
+          bottom: 'max(2.25rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))',
+        }}
+        className={`fixed left-1/2 -translate-x-1/2 z-40 md:hidden ${
+          showShareModal ? 'hidden' : 'flex'
+        } items-center gap-1 sm:gap-2 px-3 py-1.5 rounded-full backdrop-blur-2xl saturate-[190%] shadow-[0_8px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all pointer-events-auto ${
           isDarkMode
             ? 'bg-[#252527]/80 border border-white/10 ring-1 ring-white/[0.06]'
             : 'bg-white/85 border border-white/70 ring-1 ring-black/[0.04]'
@@ -1050,7 +1053,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
           {showColorPicker && (
             <div
-              className={`absolute bottom-[48px] left-1/2 -translate-x-1/2 z-50 flex gap-2 rounded-full border p-2 shadow-2xl backdrop-blur-2xl transition-all ${
+              className={`absolute bottom-[calc(100%+12px)] left-1/2 -translate-x-1/2 z-50 flex gap-2 rounded-full border p-2 shadow-2xl backdrop-blur-2xl transition-all ${
                 isDarkMode
                   ? 'border-white/15 bg-[#252527]/95 shadow-[0_12px_36px_rgba(0,0,0,0.6)]'
                   : 'border-white/80 bg-white/95 shadow-[0_12px_36px_rgba(0,0,0,0.2)]'
@@ -1087,7 +1090,11 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             aria-label="Kolaborator"
             title="Kolaborator"
             onClick={() => {
-              setShowShareModal(!showShareModal)
+              const nextState = !showShareModal
+              setShowShareModal(nextState)
+              if (nextState && noteId) {
+                fetchCollaborators(noteId)
+              }
               setShowColorPicker(false)
               setShowFolderPicker(false)
             }}
@@ -1096,13 +1103,13 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             }`}
           >
             <span>👥</span>
-            {noteMembers.length > 0 && (
+            {collaboratorList.length > 0 && (
               <span
                 className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white ${
                   isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
                 }`}
               >
-                {noteMembers.length}
+                {collaboratorList.length}
               </span>
             )}
           </button>
@@ -1127,6 +1134,307 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           </button>
         )}
       </div>
+
+      {/* 6. Apple-Styled Collaboration Modal (Bottom Sheet on Mobile, Dialog on Desktop) */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          {/* Backdrop Blur Overlay */}
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+            onClick={() => setShowShareModal(false)}
+            aria-hidden="true"
+          />
+
+          {/* Modal / Bottom Sheet Card */}
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="collab-modal-title"
+            className={`relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-[28px] border sm:rounded-[20px] sm:max-w-[480px] backdrop-blur-xl transition-all duration-200 ${
+              isDarkMode
+                ? 'border-[#3a3a3e] bg-[#252527]/95 text-[#f5f5f7] shadow-[0_20px_60px_rgba(0,0,0,0.6)]'
+                : 'border-[#e0e0e0] bg-white/95 text-[#1d1d1f] shadow-[0_20px_60px_rgba(0,0,0,0.15)]'
+            }`}
+          >
+            {/* Mobile Drag Indicator Handle */}
+            <div className="pt-3 pb-1 sm:hidden flex justify-center">
+              <div className="h-1 w-9 rounded-full bg-[#d2d2d7] dark:bg-[#48484a]" />
+            </div>
+
+            {/* Modal Header */}
+            <div
+              className={`flex items-center justify-between px-6 pt-2 pb-3.5 border-b ${
+                isDarkMode ? 'border-[#3a3a3e]' : 'border-[#f0f0f0]'
+              }`}
+            >
+              <div>
+                <h3
+                  id="collab-modal-title"
+                  className="text-[19px] font-semibold tracking-[-0.28px]"
+                >
+                  Kolaborasi Catatan
+                </h3>
+                <p className="mt-0.5 text-[13px] text-[#7a7a7a] dark:text-[#b3b3b8] tracking-[-0.12px]">
+                  {collaboratorList.length > 0
+                    ? `${collaboratorList.length + (ownerPerson ? 1 : 0)} orang memiliki akses ke catatan ini`
+                    : 'Kelola akses dan kolaborator catatan'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowShareModal(false)}
+                className={`min-h-[44px] min-w-[44px] flex items-center justify-end text-[17px] font-normal tracking-[-0.374px] active:scale-95 transition-transform ${
+                  isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'
+                }`}
+              >
+                Tutup
+              </button>
+            </div>
+
+            {/* Scrollable Modal Body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+              {/* Section 1: Orang yang Memiliki Akses */}
+              <div>
+                <div className="flex items-center justify-between mb-2.5 px-0.5">
+                  <span className="text-[12px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#b3b3b8]">
+                    Orang dengan Akses
+                  </span>
+                  <span className="text-[12px] text-[#7a7a7a] dark:text-[#b3b3b8]">
+                    {collaboratorList.length + (ownerPerson ? 1 : 0)} Anggota
+                  </span>
+                </div>
+
+                {/* Participant List Card */}
+                <div
+                  className={`rounded-[16px] border divide-y overflow-hidden ${
+                    isDarkMode
+                      ? 'border-[#3a3a3e] bg-[#1d1d1f] divide-[#3a3a3e]/70'
+                      : 'border-[#e0e0e0] bg-[#f5f5f7] divide-[#e0e0e0]/70'
+                  }`}
+                >
+                  {/* Pemilik (Owner) */}
+                  {ownerPerson && (
+                    <div className="flex items-center justify-between p-3.5 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative shrink-0">
+                          {ownerPerson.avatar_url ? (
+                            <Image
+                              src={ownerPerson.avatar_url}
+                              alt={ownerPerson.full_name}
+                              width={40}
+                              height={40}
+                              className="h-10 w-10 rounded-full object-cover border border-black/5 dark:border-white/10"
+                              unoptimized
+                            />
+                          ) : (
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0066cc] text-[15px] font-semibold text-white shadow-sm">
+                              {(ownerPerson.full_name || 'U').slice(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                          <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#34c759] text-[9px] text-white ring-2 ring-white dark:ring-[#1d1d1f]">
+                            ✓
+                          </span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[15px] font-semibold tracking-[-0.2px]">
+                            {ownerPerson.full_name}
+                            {ownerPerson.user_id === user?.id && (
+                              <span className="ml-1.5 text-[13px] font-normal text-[#7a7a7a] dark:text-[#b3b3b8]">
+                                (Anda)
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[12px] text-[#7a7a7a] dark:text-[#b3b3b8] tracking-[-0.12px]">
+                            Pemilik Catatan
+                          </p>
+                        </div>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-[-0.1px] ${
+                          isDarkMode
+                            ? 'bg-white/10 text-[#f5f5f7]'
+                            : 'bg-black/5 text-[#1d1d1f]'
+                        }`}
+                      >
+                        Pemilik
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Collaborator Rows */}
+                  {collaboratorList.length > 0 &&
+                    collaboratorList.map((m) => (
+                      <div
+                        key={m.user_id}
+                        className="flex items-center justify-between p-3.5 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="shrink-0">
+                            {m.avatar_url ? (
+                              <Image
+                                src={m.avatar_url}
+                                alt={m.full_name}
+                                width={40}
+                                height={40}
+                                className="h-10 w-10 rounded-full object-cover border border-black/5 dark:border-white/10"
+                                unoptimized
+                              />
+                            ) : (
+                              <div
+                                className={`flex h-10 w-10 items-center justify-center rounded-full text-[15px] font-semibold border ${
+                                  isDarkMode
+                                    ? 'bg-[#162838] text-[#2997ff] border-[#23435c]'
+                                    : 'bg-[#e8f2ff] text-[#0066cc] border-[#bae6fd]'
+                                }`}
+                              >
+                                {(m.full_name || 'K').slice(0, 1).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[15px] font-semibold tracking-[-0.2px]">
+                              {m.full_name}
+                              {m.user_id === user?.id && (
+                                <span className="ml-1.5 text-[13px] font-normal text-[#7a7a7a] dark:text-[#b3b3b8]">
+                                  (Anda)
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-[12px] text-[#7a7a7a] dark:text-[#b3b3b8] tracking-[-0.12px]">
+                              Dapat mengedit
+                            </p>
+                          </div>
+                        </div>
+
+                        {isOwner && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCollaborator(m.user_id)}
+                            className="shrink-0 text-[13px] text-[#ff453a] hover:underline active:scale-95 px-2 py-1"
+                          >
+                            Hapus
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                </div>
+
+                {/* Empty Collaborator Note */}
+                {collaboratorList.length === 0 && (
+                  <div
+                    className={`mt-3 rounded-[16px] border border-dashed p-4 text-center ${
+                      isDarkMode
+                        ? 'border-[#3a3a3e] bg-[#1d1d1f]/60'
+                        : 'border-[#e0e0e0] bg-[#f5f5f7]/60'
+                    }`}
+                  >
+                    <span className="text-2xl">👥</span>
+                    <p className="mt-1.5 text-[14px] font-semibold tracking-[-0.2px]">
+                      Belum ada kolaborator yang diundang
+                    </p>
+                    <p className="mt-0.5 text-[12px] text-[#7a7a7a] dark:text-[#b3b3b8]">
+                      Undang rekan lewat email di bawah untuk mulai mengedit bersama secara real-time.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: Form Undang Kolaborator */}
+              {isOwner && (
+                <div>
+                  <label
+                    htmlFor="invite-collab-input"
+                    className="block text-[12px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#b3b3b8] mb-2 px-0.5"
+                  >
+                    Undang Kolaborator Baru
+                  </label>
+
+                  {isPremium ? (
+                    <form onSubmit={handleInviteCollaborator} className="space-y-3">
+                      <div className="relative flex items-center">
+                        <span className="absolute left-4 text-[#7a7a7a] dark:text-[#b3b3b8] text-[15px] pointer-events-none">
+                          ✉️
+                        </span>
+                        <input
+                          id="invite-collab-input"
+                          type="email"
+                          required
+                          value={inviteEmail}
+                          onChange={(e) => setInviteEmail(e.target.value)}
+                          placeholder="Masukkan email rekan (nama@email.com)"
+                          className={`h-11 w-full rounded-full border pl-11 pr-4 text-[15px] outline-none transition-colors focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
+                            isDarkMode
+                              ? 'border-[#3a3a3e] bg-[#1d1d1f] text-[#f5f5f7] placeholder-[#b3b3b8]/50'
+                              : 'border-[#e0e0e0] bg-white text-[#1d1d1f] placeholder-[#7a7a7a]/50'
+                          }`}
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={inviteLoading || !inviteEmail.trim()}
+                        className={`w-full min-h-11 rounded-full text-[15px] font-normal text-white transition-transform active:scale-95 disabled:opacity-40 flex items-center justify-center gap-2 ${
+                          isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
+                        }`}
+                      >
+                        {inviteLoading ? (
+                          <>
+                            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                            </svg>
+                            <span>Mengirim Undangan...</span>
+                          </>
+                        ) : (
+                          <span>Kirim Undangan Kolaborasi</span>
+                        )}
+                      </button>
+                    </form>
+                  ) : (
+                    <div
+                      className={`rounded-[16px] border p-4 text-center ${
+                        isDarkMode
+                          ? 'border-[#4d3f1a] bg-[#2d2616]'
+                          : 'border-[#fde68a] bg-[#fff8e6]'
+                      }`}
+                    >
+                      <span className="text-xl">★</span>
+                      <p className="mt-1 text-[14px] font-semibold">
+                        Fitur Kolaborasi Premium
+                      </p>
+                      <p className="mt-0.5 text-[13px] text-[#7a7a7a] dark:text-[#b3b3b8]">
+                        Tingkatkan akun ke Premium untuk mengundang kolaborator tanpa batas.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => router.push('/')}
+                        className={`mt-3 inline-flex min-h-[36px] items-center justify-center rounded-full px-4 text-[13px] font-normal text-white active:scale-95 transition-transform ${
+                          isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
+                        }`}
+                      >
+                        Lihat Paket Premium
+                      </button>
+                    </div>
+                  )}
+
+                  {inviteMsg && (
+                    <p
+                      className={`mt-2.5 text-center text-[13px] font-normal ${
+                        inviteMsg.startsWith('Gagal') ? 'text-[#ff453a]' : 'text-[#34c759]'
+                      }`}
+                    >
+                      {inviteMsg}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Safe Area Padding */}
+            <div className="h-6 sm:h-3" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

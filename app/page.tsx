@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
@@ -76,6 +76,9 @@ export default function Home() {
   const [isResendingVerification, setIsResendingVerification] = useState(false)
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false)
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
+  const [isPageListOpen, setIsPageListOpen] = useState(false)
+  const [isPageListClosing, setIsPageListClosing] = useState(false)
+  const isMounted = useSyncExternalStore(() => () => {}, () => true, () => false)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [settingsName, setSettingsName] = useState('')
@@ -121,6 +124,34 @@ export default function Home() {
     const frame = window.requestAnimationFrame(() => setIsDarkMode(shouldUseDarkMode))
     return () => window.cancelAnimationFrame(frame)
   }, [])
+
+  const handleOpenPageList = useCallback(() => {
+    setIsPageListClosing(false)
+    setIsPageListOpen(true)
+  }, [])
+
+  const handleClosePageList = useCallback((callback?: () => void) => {
+    if (isPageListClosing) return
+    setIsPageListClosing(true)
+    setTimeout(() => {
+      setIsPageListOpen(false)
+      setIsPageListClosing(false)
+      if (callback) callback()
+    }, 220)
+  }, [isPageListClosing])
+
+  useEffect(() => {
+    if (isPageListOpen || isSettingsOpen || premiumDetailOpen || isPremiumOfferOpen || isFormOpen || confirmation || premiumSuccessExpiry) {
+      const originalOverflow = document.body.style.overflow
+      const originalTouchAction = document.body.style.touchAction
+      document.body.style.overflow = 'hidden'
+      document.body.style.touchAction = 'none'
+      return () => {
+        document.body.style.overflow = originalOverflow
+        document.body.style.touchAction = originalTouchAction
+      }
+    }
+  }, [isPageListOpen, isSettingsOpen, premiumDetailOpen, isPremiumOfferOpen, isFormOpen, confirmation, premiumSuccessExpiry])
 
   const toggleDarkMode = () => {
     const nextMode = !isDarkMode
@@ -623,7 +654,10 @@ export default function Home() {
   // Clear opening loader whenever route returns to '/'
   useEffect(() => {
     if (pathname === '/') {
-      setOpeningNoteId(null)
+      const frame = window.requestAnimationFrame(() => {
+        setOpeningNoteId(null)
+      })
+      return () => window.cancelAnimationFrame(frame)
     }
   }, [pathname])
 
@@ -648,8 +682,11 @@ export default function Home() {
   // Auto-refresh notes & folders when user navigates back to dashboard '/'
   useEffect(() => {
     if (pathname === '/' && user) {
-      fetchNotes(user.id)
-      fetchFolders(user.id)
+      const timer = window.setTimeout(() => {
+        fetchNotes(user.id)
+        fetchFolders(user.id)
+      }, 0)
+      return () => window.clearTimeout(timer)
     }
   }, [pathname, user])
 
@@ -1142,28 +1179,20 @@ export default function Home() {
   // --- 2. MAIN DASHBOARD PAGE (Apple Design System) ---
   return (
     <div className={`min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans flex flex-col selection:bg-[#0066cc] selection:text-white animate-dashboard-enter ${isDarkMode ? 'theme-dark' : ''}`}>
-      {/* Global Thin Nav Bar */}
-      <header data-dashboard-header className="sticky top-0 z-50 flex h-[44px] items-center justify-between gap-2 bg-[#000000] px-3 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
-        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-          <span className="text-base"></span>
-          <span className="font-semibold tracking-normal">Notes</span>
-          <button
-            type="button"
-            onClick={openPlanDetails}
-            className={`min-h-8 shrink-0 rounded-full px-2 text-[10px] tracking-normal transition-colors active:scale-95 ${isPremium ? 'bg-[#0066cc] text-white' : 'bg-white/10 text-white/80'}`}
-          >
-            {isPremium ? '★ Premium' : 'Free Plan'}
-          </button>
+      {/* Global Thin Nav Bar (Apple Minimalist) */}
+      <header data-dashboard-header className="sticky top-0 z-50 flex h-[44px] items-center justify-between bg-[#000000] px-4 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
+        <div className="flex min-w-0 items-center">
+          <span className="font-semibold text-[15px] sm:text-[14px] tracking-normal text-white">Notes</span>
         </div>
 
-        {/* Google Profile Header (Ujung Kanan) */}
+        {/* Profile Button (Ujung Kanan) */}
         <div className="relative">
           <button
             type="button"
             aria-expanded={isProfileMenuOpen}
             aria-haspopup="menu"
             onClick={() => setIsProfileMenuOpen((open) => !open)}
-            className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-1.5 text-white transition-colors hover:bg-white/10 active:scale-[0.98] sm:gap-2 sm:px-2"
+            className="flex min-h-[36px] items-center gap-1.5 rounded-full p-1 text-white transition-colors hover:bg-white/10 active:scale-95"
           >
             {(profile?.avatar_url || user.user_metadata?.avatar_url) ? (
               <Image
@@ -1175,94 +1204,427 @@ export default function Home() {
                 className="h-7 w-7 rounded-full object-cover"
               />
             ) : (
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-[12px]">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20 text-[12px] font-medium">
                 {(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}
               </span>
             )}
-            <span className="hidden max-w-[180px] truncate text-[12px] sm:inline">
-              {profile?.full_name || user.email}
-            </span>
-            <span aria-hidden="true" className="text-[10px]">⌄</span>
+            <span aria-hidden="true" className="text-[9px] opacity-70">⌄</span>
           </button>
+
+          {/* Profile Menu Popover: Hanya Nama, Email, dan Tombol Logout */}
           {isProfileMenuOpen && (
-            <div role="menu" className="absolute right-0 top-[calc(100%+8px)] z-[55] w-[min(14rem,calc(100vw-1.5rem))] rounded-[8px] border border-[#e0e0e0] bg-white p-2 text-[#1d1d1f]">
-              <div className="border-b border-[#f0f0f0] px-3 py-2">
-                <p className="truncate text-[14px] font-semibold">{profile?.full_name || 'Akun Notes'}</p>
-                <p className="truncate text-[12px] text-[#7a7a7a]">{user.email}</p>
-                <button onClick={openPlanDetails} className="mt-2 min-h-8 rounded-full bg-[#f5f5f7] px-3 text-[12px] text-[#1d1d1f] active:scale-95">
-                  Paket aktif: {isPremium ? '★ Premium' : 'Free Plan'}
+            <>
+              <div
+                className="fixed inset-0 z-50 bg-transparent"
+                onClick={() => setIsProfileMenuOpen(false)}
+                aria-hidden="true"
+              />
+              <div
+                role="menu"
+                className={`absolute right-0 top-[calc(100%+8px)] z-[55] w-64 rounded-[14px] border p-2 shadow-2xl backdrop-blur-2xl transition-all ${
+                  isDarkMode
+                    ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7] shadow-[0_12px_36px_rgba(0,0,0,0.6)]'
+                    : 'border-black/5 bg-white/95 text-[#1d1d1f] shadow-[0_12px_36px_rgba(0,0,0,0.15)]'
+                }`}
+              >
+                <div className="px-3 py-2.5">
+                  <p className="truncate text-[15px] font-semibold tracking-[-0.2px]">
+                    {profile?.full_name || user.user_metadata?.full_name || 'Akun Notes'}
+                  </p>
+                  <p className={`truncate text-[13px] tracking-[-0.12px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
+                    {user.email}
+                  </p>
+                </div>
+                <div className={`my-1 h-px ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsProfileMenuOpen(false)
+                    handleLogout()
+                  }}
+                  className={`flex w-full min-h-[40px] items-center gap-2 rounded-[10px] px-3 text-left text-[14px] font-normal transition-colors active:scale-95 ${
+                    isDarkMode
+                      ? 'text-[#ff453a] hover:bg-white/10'
+                      : 'text-[#ff3b30] hover:bg-black/5'
+                  }`}
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  <span>Keluar</span>
                 </button>
               </div>
-                <div className="flex min-h-12 items-center justify-between gap-3 border-b border-[#f0f0f0] px-3">
-                  <span className="text-[14px]">Tampilan gelap</span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={isDarkMode}
-                    aria-label="Aktifkan tampilan gelap"
-                    onClick={toggleDarkMode}
-                    className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 active:scale-95 ${isDarkMode ? 'bg-[#0066cc]' : 'bg-[#d2d2d7]'}`}
-                  >
-                    <span className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white transition-transform duration-200 ${isDarkMode ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </button>
-                </div>
-              <button
-                role="menuitem"
-                onClick={() => {
-                  setSettingsName(profile?.full_name || '')
-                  setSettingsPassword('')
-                  setSettingsMessage('')
-                  setIsSettingsOpen(true)
-                  setIsProfileMenuOpen(false)
-                }}
-                className="min-h-11 w-full rounded-[5px] px-3 text-left text-[14px] hover:bg-[#f5f5f7] active:scale-[0.99]"
-              >Pengaturan</button>
-              <button
-                role="menuitem"
-                onClick={handleLogout}
-                className="min-h-11 w-full rounded-[5px] px-3 text-left text-[14px] text-[#0066cc] hover:bg-[#f5f5f7] active:scale-[0.99]"
-              >Keluar</button>
-            </div>
+            </>
           )}
         </div>
       </header>
 
       {/* Sub-Nav Frosted Glass */}
-      <nav data-dashboard-nav className="sticky top-[44px] z-40 flex min-h-[52px] flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[#e0e0e0] bg-[#f5f5f7]/80 px-3 py-2 backdrop-blur-md sm:px-6 md:px-12">
-        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-6">
-          <span className="text-[18px] font-semibold tracking-[0.1px] text-[#1d1d1f] sm:text-[21px] sm:tracking-[0.231px]">
-            {activeTab === 'notes' ? 'Catatan Saya' : 'Sampah'}
-          </span>
-          <div className="flex shrink-0 gap-1 sm:gap-2">
-            <button
-              onClick={() => setActiveTab('notes')}
-              className={`min-h-10 rounded-full px-2 text-[12px] transition-all sm:px-3 sm:text-[14px] ${
-                activeTab === 'notes' ? 'bg-[#1d1d1f] text-white' : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
-              }`}
-            >
-              Utama ({activeNotes.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('trash')}
-              className={`min-h-10 rounded-full px-2 text-[12px] transition-all sm:px-3 sm:text-[14px] ${
-                activeTab === 'trash' ? 'bg-[#1d1d1f] text-white' : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
-              }`}
-            >
-              Sampah ({trashedNotes.length})
-            </button>
+      <nav
+        data-dashboard-nav
+        className={`sticky top-[44px] z-40 flex min-h-[50px] items-center justify-between border-b px-3 sm:px-6 md:px-12 backdrop-blur-md transition-colors ${
+          isDarkMode
+            ? 'border-white/10 bg-[#1d1d1f]/80'
+            : 'border-black/5 bg-[#f5f5f7]/80'
+        }`}
+      >
+        <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+          {/* Tombol Page List di sebelah kiri */}
+          <button
+            type="button"
+            aria-label="Buka Daftar Halaman & Menu"
+            title="Daftar Halaman & Menu"
+            onClick={handleOpenPageList}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 ${
+              isDarkMode
+                ? 'text-[#f5f5f7] hover:bg-white/10 active:bg-white/15'
+                : 'text-[#1d1d1f] hover:bg-black/5 active:bg-black/10'
+            }`}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h10M4 18h16" />
+            </svg>
+          </button>
+
+          {/* Judul Halaman Aktif */}
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="truncate text-[18px] font-semibold tracking-[-0.374px] sm:text-[21px] sm:tracking-[0.231px]">
+              {activeTab === 'notes' ? 'Catatan Saya' : 'Sampah'}
+            </span>
+
+            {activeTab === 'trash' && (
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                isDarkMode ? 'bg-[#ff453a]/20 text-[#ff453a]' : 'bg-[#ff3b30]/10 text-[#ff3b30]'
+              }`}>
+                {trashedNotes.length}
+              </span>
+            )}
           </div>
         </div>
 
-        {activeTab === 'notes' && (
+        {/* Tombol Aksi di Kanan */}
+        {activeTab === 'notes' ? (
           <button
+            type="button"
             onClick={handleNewNoteClick}
-            className="min-h-10 shrink-0 rounded-full bg-[#0066cc] px-3 text-[12px] font-normal text-white transition-all hover:bg-[#0071e3] active:scale-95 sm:px-4 sm:text-[14px]"
+            className={`flex min-h-[36px] shrink-0 items-center gap-1 rounded-full px-3.5 text-[13px] font-normal text-white transition-all active:scale-95 sm:px-4 sm:text-[14px] ${
+              isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'
+            }`}
           >
-            <span className="sm:hidden">{isFormOpen ? 'Tutup' : '+ Baru'}</span>
-            <span className="hidden sm:inline">{isFormOpen ? 'Tutup Form' : '+ Catatan Baru'}</span>
+            <span className="text-[15px] leading-none">+</span>
+            <span className="sm:hidden">{isFormOpen ? 'Tutup' : 'Baru'}</span>
+            <span className="hidden sm:inline">{isFormOpen ? 'Tutup Form' : 'Catatan Baru'}</span>
           </button>
+        ) : (
+          trashedNotes.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setConfirmation({ action: 'deleteAll' })}
+              className={`min-h-[36px] shrink-0 rounded-full px-3 text-[12px] sm:text-[13px] font-normal transition-all active:scale-95 ${
+                isDarkMode
+                  ? 'text-[#ff453a] hover:bg-white/10'
+                  : 'text-[#ff3b30] hover:bg-black/5'
+              }`}
+            >
+              Kosongkan Sampah
+            </button>
+          )
         )}
       </nav>
+
+      {/* Page List Drawer (Slide-over Sheet dari Kiri ala Apple) */}
+      {isMounted && isPageListOpen && createPortal(
+        <div className="fixed inset-0 z-[100] flex">
+          {/* Backdrop Blur */}
+          <div
+            className={`fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200 ${
+              isPageListClosing ? 'animate-modal-backdrop-exit' : 'animate-modal-backdrop'
+            }`}
+            onClick={() => handleClosePageList()}
+            aria-hidden="true"
+          />
+
+          {/* Drawer Sheet */}
+          <aside
+            data-drawer
+            aria-label="Daftar Halaman dan Pengaturan"
+            className={`relative z-10 flex h-full w-[280px] max-w-[82vw] flex-col justify-between border-r shadow-2xl backdrop-blur-2xl transition-all duration-300 overscroll-none ${
+              isPageListClosing ? 'animate-drawer-slide-out' : 'animate-drawer-slide-in'
+            } ${
+              isDarkMode
+                ? 'border-white/10 bg-[#1d1d1f]/95 text-[#f5f5f7] shadow-[8px_0_32px_rgba(0,0,0,0.6)]'
+                : 'border-black/5 bg-[#f5f5f7]/95 text-[#1d1d1f] shadow-[8px_0_32px_rgba(0,0,0,0.15)]'
+            }`}
+          >
+            {/* Header Drawer */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-black/[0.04] dark:border-white/[0.06]">
+              <span className="text-[15px] font-semibold tracking-[-0.374px]">Notes</span>
+              <button
+                type="button"
+                aria-label="Tutup menu"
+                onClick={() => handleClosePageList()}
+                className={`flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-95 ${
+                  isDarkMode ? 'bg-white/10 text-[#f5f5f7] hover:bg-white/15' : 'bg-black/5 text-[#1d1d1f] hover:bg-black/10'
+                }`}
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Konten Scrollable Drawer (Sleek & Ultra-Compact agar pas tanpa scroll di layar standar) */}
+            <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-2 space-y-2.5">
+              {/* Section 1: Halaman (Catatan Utama & Sampah) */}
+              <div>
+                <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#86868b] mb-1">
+                  Halaman
+                </p>
+                <div className="space-y-1">
+                  {/* Catatan Utama */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('notes')
+                      handleClosePageList()
+                    }}
+                    className={`flex w-full items-center justify-between rounded-[10px] px-3 py-1.5 text-left text-[14px] font-normal transition-all active:scale-[0.98] ${
+                      activeTab === 'notes'
+                        ? isDarkMode
+                          ? 'bg-[#2997ff] text-white font-medium shadow-sm'
+                          : 'bg-[#0066cc] text-white font-medium shadow-sm'
+                        : isDarkMode
+                        ? 'text-[#f5f5f7] hover:bg-white/10'
+                        : 'text-[#1d1d1f] hover:bg-black/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-base">📝</span>
+                      <span>Catatan Utama</span>
+                    </div>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        activeTab === 'notes'
+                          ? 'bg-white/20 text-white'
+                          : isDarkMode
+                          ? 'bg-white/10 text-[#86868b]'
+                          : 'bg-black/5 text-[#7a7a7a]'
+                      }`}
+                    >
+                      {activeNotes.length}
+                    </span>
+                  </button>
+
+                  {/* Sampah */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('trash')
+                      handleClosePageList()
+                    }}
+                    className={`flex w-full items-center justify-between rounded-[10px] px-3 py-1.5 text-left text-[14px] font-normal transition-all active:scale-[0.98] ${
+                      activeTab === 'trash'
+                        ? isDarkMode
+                          ? 'bg-[#2997ff] text-white font-medium shadow-sm'
+                          : 'bg-[#0066cc] text-white font-medium shadow-sm'
+                        : isDarkMode
+                        ? 'text-[#f5f5f7] hover:bg-white/10'
+                        : 'text-[#1d1d1f] hover:bg-black/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-base">🗑️</span>
+                      <span>Sampah</span>
+                    </div>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        activeTab === 'trash'
+                          ? 'bg-white/20 text-white'
+                          : isDarkMode
+                          ? 'bg-white/10 text-[#86868b]'
+                          : 'bg-black/5 text-[#7a7a7a]'
+                      }`}
+                    >
+                      {trashedNotes.length}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 2: Pengaturan Akun */}
+              <div>
+                <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#86868b] mb-1">
+                  Akun & Preferensi
+                </p>
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleClosePageList(() => {
+                        setSettingsName(profile?.full_name || '')
+                        setSettingsPassword('')
+                        setSettingsMessage('')
+                        setIsSettingsOpen(true)
+                      })
+                    }}
+                    className={`flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[14px] transition-all active:scale-[0.98] ${
+                      isDarkMode
+                        ? 'text-[#f5f5f7] hover:bg-white/10'
+                        : 'text-[#1d1d1f] hover:bg-black/5'
+                    }`}
+                  >
+                    <span className="text-base">⚙️</span>
+                    <span>Pengaturan Akun</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 3: Paket Premium / Free yang sedang aktif */}
+              <div>
+                <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#86868b] mb-1">
+                  Paket Langganan
+                </p>
+                <div
+                  className={`rounded-[12px] border p-2 transition-colors ${
+                    isDarkMode
+                      ? 'border-white/10 bg-[#252527]/70'
+                      : 'border-black/5 bg-white/70'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-semibold">
+                      {isPremium ? '★ Paket Premium' : 'Free Plan'}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        isPremium
+                          ? isDarkMode
+                            ? 'bg-[#2997ff]/20 text-[#2997ff]'
+                            : 'bg-[#0066cc]/10 text-[#0066cc]'
+                          : isDarkMode
+                          ? 'bg-white/10 text-[#86868b]'
+                          : 'bg-black/5 text-[#7a7a7a]'
+                      }`}
+                    >
+                      {isPremium ? 'Aktif' : 'Standar'}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-[#7a7a7a] dark:text-[#86868b] leading-tight">
+                    {isPremium
+                      ? 'Folder tak terbatas & kolaborasi aktif.'
+                      : 'Maksimal 1 folder.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleClosePageList(() => {
+                        openPlanDetails()
+                      })
+                    }}
+                    className={`mt-1.5 flex w-full min-h-[28px] items-center justify-center rounded-full text-[11px] font-medium transition-all active:scale-95 ${
+                      isPremium
+                        ? isDarkMode
+                          ? 'border border-white/15 bg-white/5 text-[#f5f5f7] hover:bg-white/10'
+                          : 'border border-black/10 bg-black/5 text-[#1d1d1f] hover:bg-black/10'
+                        : isDarkMode
+                        ? 'bg-[#2997ff] text-white hover:bg-[#0071e3]'
+                        : 'bg-[#0066cc] text-white hover:bg-[#0055b3]'
+                    }`}
+                  >
+                    {isPremium ? 'Detail Langganan' : 'Tingkatkan ke Premium'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 4: Pengaturan Tema Terang atau Gelap */}
+              <div>
+                <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#86868b] mb-1">
+                  Tampilan
+                </p>
+                <div
+                  className={`flex items-center justify-between rounded-[12px] border px-3 py-1.5 transition-colors ${
+                    isDarkMode
+                      ? 'border-white/10 bg-[#252527]/70'
+                      : 'border-black/5 bg-white/70'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{isDarkMode ? '🌙' : '☀️'}</span>
+                    <span className="text-[12px] font-medium">
+                      {isDarkMode ? 'Mode Gelap' : 'Mode Terang'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isDarkMode}
+                    aria-label="Alihkan tema terang atau gelap"
+                    onClick={toggleDarkMode}
+                    className={`relative h-5 w-10 shrink-0 rounded-full transition-colors duration-200 active:scale-95 ${
+                      isDarkMode ? 'bg-[#0066cc]' : 'bg-[#d2d2d7]'
+                    }`}
+                  >
+                    <span
+                      className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 shadow-sm ${
+                        isDarkMode ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Profil Pengguna ala Apple di Bawah Page List */}
+            <div className="p-3 border-t border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02]">
+              <button
+                type="button"
+                onClick={() => {
+                  handleClosePageList(() => {
+                    setSettingsName(profile?.full_name || '')
+                    setSettingsPassword('')
+                    setSettingsMessage('')
+                    setIsSettingsOpen(true)
+                  })
+                }}
+                className={`flex w-full items-center gap-3 rounded-[12px] p-2 text-left transition-all active:scale-[0.98] ${
+                  isDarkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'
+                }`}
+              >
+                {(profile?.avatar_url || user.user_metadata?.avatar_url) ? (
+                  <Image
+                    src={profile?.avatar_url || user.user_metadata.avatar_url}
+                    alt=""
+                    width={38}
+                    height={38}
+                    unoptimized
+                    className="h-9.5 w-9.5 shrink-0 rounded-full object-cover border border-black/10 dark:border-white/15 shadow-sm"
+                  />
+                ) : (
+                  <span className={`flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold shadow-sm ${
+                    isDarkMode ? 'bg-[#2997ff] text-white' : 'bg-[#0066cc] text-white'
+                  }`}>
+                    {(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className={`truncate text-[14px] font-semibold leading-snug tracking-[-0.2px] ${
+                    isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
+                  }`}>
+                    {profile?.full_name || user.user_metadata?.full_name || 'Akun Notes'}
+                  </p>
+                  <p className={`truncate text-[12px] leading-tight ${
+                    isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'
+                  }`}>
+                    {user.email}
+                  </p>
+                </div>
+              </button>
+            </div>
+          </aside>
+        </div>,
+        document.body
+      )}
 
       {/* Content Area */}
       <main data-dashboard-main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 sm:py-8 md:px-12">
@@ -1308,9 +1670,9 @@ export default function Home() {
         )}
 
         {/* Note editor modal */}
-        {isFormOpen && activeTab === 'notes' && (
+        {isMounted && isFormOpen && activeTab === 'notes' && createPortal(
           <div
-            className={`fixed inset-0 z-[60] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] sm:p-4 ${isFormClosing ? 'animate-modal-backdrop-exit' : 'animate-modal-backdrop'}`}
+            className={`fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-2 backdrop-blur-sm sm:p-4 ${isFormClosing ? 'animate-modal-backdrop-exit' : 'animate-modal-backdrop'}`}
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) closeNoteForm()
             }}
@@ -1470,7 +1832,8 @@ export default function Home() {
                 </div>
               </div>
             </form>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* TAB 1: UTAMA (Active Notes) */}
@@ -1676,9 +2039,9 @@ export default function Home() {
           document.body,
         )}
 
-        {confirmation && (
+        {isMounted && confirmation && createPortal(
           <div
-            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] animate-modal-backdrop sm:p-4"
+            className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 p-2 backdrop-blur-sm animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setConfirmation(null)
             }}
@@ -1688,19 +2051,29 @@ export default function Home() {
               aria-modal="true"
               aria-labelledby="confirmation-title"
               aria-describedby="confirmation-description"
-              className="max-h-[90dvh] w-full max-w-[420px] overflow-y-auto rounded-[18px] border border-[#e0e0e0] bg-white p-5 animate-confirm-enter sm:p-7"
+              className={`max-h-[90dvh] w-full max-w-[420px] overflow-y-auto rounded-[18px] border p-5 animate-confirm-enter sm:p-7 shadow-2xl backdrop-blur-2xl ${
+                isDarkMode
+                  ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7]'
+                  : 'border-[#e0e0e0] bg-white/95 text-[#1d1d1f]'
+              }`}
             >
-              <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-full bg-[#f5f5f7] text-[21px] font-semibold text-[#0066cc]" aria-hidden="true">
+              <div className={`mb-5 flex h-11 w-11 items-center justify-center rounded-full text-[21px] font-semibold ${
+                isDarkMode ? 'bg-white/10 text-[#2997ff]' : 'bg-[#f5f5f7] text-[#0066cc]'
+              }`} aria-hidden="true">
                 {confirmation.action === 'trash' ? '↘' : '×'}
               </div>
-              <h2 id="confirmation-title" className="text-[21px] font-semibold leading-[1.2] tracking-[-0.2px] text-[#1d1d1f]">
+              <h2 id="confirmation-title" className={`text-[21px] font-semibold leading-[1.2] tracking-[-0.2px] ${
+                isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
+              }`}>
                 {confirmation.action === 'trash'
                   ? 'Pindahkan ke Tong Sampah?'
                   : confirmation.action === 'deleteAll'
                     ? 'Hapus Semua Catatan Permanen?'
                     : 'Hapus Catatan Permanen?'}
               </h2>
-              <p id="confirmation-description" className="mt-3 text-[17px] leading-[1.47] text-[#1d1d1f]">
+              <p id="confirmation-description" className={`mt-3 text-[17px] leading-[1.47] ${
+                isDarkMode ? 'text-[#86868b]' : 'text-[#1d1d1f]'
+              }`}>
                 {confirmation.action === 'trash'
                   ? `“${confirmation.note?.title || 'Tanpa Judul'}” akan dipindahkan ke tong sampah. Kamu masih bisa memulihkannya nanti.`
                   : confirmation.action === 'deleteAll'
@@ -1712,14 +2085,18 @@ export default function Home() {
                   type="button"
                   autoFocus
                   onClick={() => setConfirmation(null)}
-                  className="min-h-11 rounded-full px-[18px] text-[14px] text-[#0066cc] transition-colors hover:bg-[#f5f5f7] active:scale-95"
+                  className={`min-h-11 rounded-full px-[18px] text-[14px] transition-colors active:scale-95 ${
+                    isDarkMode ? 'text-[#2997ff] hover:bg-white/10' : 'text-[#0066cc] hover:bg-[#f5f5f7]'
+                  }`}
                 >
                   Batal
                 </button>
                 <button
                   type="button"
                   onClick={confirmDestructiveAction}
-                  className="min-h-11 rounded-full bg-[#0066cc] px-[20px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95"
+                  className={`min-h-11 rounded-full px-[20px] text-[14px] text-white transition-all active:scale-95 ${
+                    isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'
+                  }`}
                 >
                   {confirmation.action === 'trash'
                     ? 'Pindahkan'
@@ -1729,12 +2106,13 @@ export default function Home() {
                 </button>
               </div>
             </section>
-          </div>
+          </div>,
+          document.body
         )}
 
-        {isSettingsOpen && (
+        {isMounted && isSettingsOpen && createPortal(
           <div
-            className="fixed inset-0 z-[65] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] animate-modal-backdrop sm:p-4"
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setIsSettingsOpen(false)
             }}
@@ -1744,29 +2122,33 @@ export default function Home() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="account-settings-title"
-              className="max-h-[90dvh] w-full max-w-[520px] overflow-y-auto overscroll-contain rounded-[18px] border border-[#e0e0e0] bg-white p-5 animate-modal-enter sm:max-h-[min(82vh,720px)] sm:p-8"
+              className={`max-h-[90dvh] w-full max-w-[520px] overflow-y-auto overscroll-contain rounded-[18px] border p-5 animate-modal-enter sm:max-h-[min(82vh,720px)] sm:p-8 shadow-2xl backdrop-blur-2xl ${
+                isDarkMode
+                  ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7]'
+                  : 'border-[#e0e0e0] bg-white/95 text-[#1d1d1f]'
+              }`}
             >
               <div className="mb-6 flex items-start justify-between gap-4">
                 <div>
-                  <h2 id="account-settings-title" className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">Pengaturan Akun</h2>
-                  <p className="mt-2 text-[14px] text-[#7a7a7a]">Kelola informasi profil dan keamanan akun.</p>
+                  <h2 id="account-settings-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Pengaturan Akun</h2>
+                  <p className={`mt-2 text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>Kelola informasi profil dan keamanan akun.</p>
                 </div>
-                <button type="button" aria-label="Tutup pengaturan" onClick={() => setIsSettingsOpen(false)} className="flex h-11 w-11 items-center justify-center rounded-full text-[24px] text-[#7a7a7a] hover:bg-[#f5f5f7] active:scale-95">×</button>
+                <button type="button" aria-label="Tutup pengaturan" onClick={() => setIsSettingsOpen(false)} className={`flex h-11 w-11 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}>×</button>
               </div>
 
               <div className="mb-6 flex items-center gap-4">
                 {(profile?.avatar_url || user.user_metadata?.avatar_url) ? (
                   <Image src={profile?.avatar_url || user.user_metadata.avatar_url} alt="Foto profil" width={64} height={64} unoptimized className="h-16 w-16 rounded-full object-cover" />
                 ) : (
-                  <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#f5f5f7] text-[24px] text-[#1d1d1f]">{(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}</span>
+                  <span className={`flex h-16 w-16 items-center justify-center rounded-full text-[24px] ${isDarkMode ? 'bg-white/10 text-[#f5f5f7]' : 'bg-[#f5f5f7] text-[#1d1d1f]'}`}>{(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}</span>
                 )}
-                <label className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] active:scale-95">
+                <label className={`inline-flex min-h-11 cursor-pointer items-center rounded-full border px-4 text-[14px] active:scale-95 ${isDarkMode ? 'border-[#2997ff] text-[#2997ff]' : 'border-[#0066cc] text-[#0066cc]'}`}>
                   Ubah Foto
                   <input type="file" accept="image/*" className="sr-only" onChange={handleAvatarUpload} />
                 </label>
               </div>
 
-              <label className="mb-5 block text-[14px] text-[#333333]">
+              <label className={`mb-5 block text-[14px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#333333]'}`}>
                 Nama pengguna
                 <input
                   required
@@ -1774,42 +2156,81 @@ export default function Home() {
                   autoComplete="name"
                   value={settingsName}
                   onChange={(event) => setSettingsName(event.target.value)}
-                  className="mt-2 h-11 w-full rounded-[8px] border border-[#e0e0e0] bg-white px-3 text-[17px] text-[#1d1d1f] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
+                  className={`mt-2 h-11 w-full rounded-[8px] border px-3 text-[17px] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3] ${
+                    isDarkMode
+                      ? 'border-white/15 bg-white/5 text-[#f5f5f7]'
+                      : 'border-[#e0e0e0] bg-white text-[#1d1d1f]'
+                  }`}
                 />
               </label>
 
-              <p className="mb-5 text-[14px] text-[#7a7a7a]">Email: {user.email}</p>
+              <p className={`mb-5 text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>Email: {user.email}</p>
               {((user.app_metadata?.providers as string[] | undefined) ?? []).includes('email') ? (
-                <label className="block text-[14px] text-[#333333]">
-                  Password baru <span className="text-[#7a7a7a]">(opsional)</span>
-                  <span className="mt-2 flex h-11 items-center rounded-[8px] border border-[#e0e0e0] bg-white focus-within:ring-2 focus-within:ring-[#0071e3]">
+                <label className={`block text-[14px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#333333]'}`}>
+                  Password baru <span className={isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]' }>(opsional)</span>
+                  <span className={`mt-2 flex h-11 items-center rounded-[8px] border focus-within:ring-2 focus-within:ring-[#0071e3] ${
+                    isDarkMode ? 'border-white/15 bg-white/5' : 'border-[#e0e0e0] bg-white'
+                  }`}>
                     <input
                       type={showSettingsPassword ? 'text' : 'password'}
                       minLength={8}
                       autoComplete="new-password"
                       value={settingsPassword}
                       onChange={(event) => setSettingsPassword(event.target.value)}
-                      className="h-full min-w-0 flex-1 bg-transparent px-3 text-[17px] text-[#1d1d1f] outline-none"
+                      className={`h-full min-w-0 flex-1 bg-transparent px-3 text-[17px] outline-none ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}
                     />
-                    <button type="button" aria-label={showSettingsPassword ? 'Sembunyikan password' : 'Tampilkan password'} onClick={() => setShowSettingsPassword((visible) => !visible)} className="h-11 rounded-full px-3 text-[12px] text-[#0066cc] active:scale-95">{showSettingsPassword ? 'Sembunyikan' : 'Tampilkan'}</button>
+                    <button type="button" aria-label={showSettingsPassword ? 'Sembunyikan password' : 'Tampilkan password'} onClick={() => setShowSettingsPassword((visible) => !visible)} className={`h-11 rounded-full px-3 text-[12px] active:scale-95 ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>{showSettingsPassword ? 'Sembunyikan' : 'Tampilkan'}</button>
                   </span>
                 </label>
               ) : (
-                <p className="rounded-[8px] bg-[#f5f5f7] p-3 text-[14px] leading-[1.47] text-[#7a7a7a]">Akun ini masuk dengan Google. Penggantian password dikelola melalui akun Google.</p>
+                <p className={`rounded-[8px] p-3 text-[14px] leading-[1.47] ${isDarkMode ? 'bg-white/5 text-[#86868b]' : 'bg-[#f5f5f7] text-[#7a7a7a]'}`}>Akun ini masuk dengan Google. Penggantian password dikelola melalui akun Google.</p>
               )}
 
-              {settingsMessage && <p aria-live="polite" className="mt-4 text-[14px] text-[#1d1d1f]">{settingsMessage}</p>}
+              {settingsMessage && <p aria-live="polite" className={`mt-4 text-[14px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>{settingsMessage}</p>}
+
+              {/* Seksi Keluar dari Akun ala Apple */}
+              <div className="mt-7 border-t border-black/[0.06] pt-5 dark:border-white/[0.08]">
+                <div className="flex flex-col gap-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
+                  <div>
+                    <p className={`text-[15px] font-semibold tracking-[-0.2px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>
+                      Keluar dari Akun
+                    </p>
+                    <p className={`mt-0.5 text-[13px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
+                      Akhiri sesi aktif akun ini pada perangkatmu.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSettingsOpen(false)
+                      handleLogout()
+                    }}
+                    className={`inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-full px-4 text-[13px] font-medium transition-all active:scale-95 ${
+                      isDarkMode
+                        ? 'border border-[#ff453a]/30 bg-[#ff453a]/10 text-[#ff453a] hover:bg-[#ff453a]/20'
+                        : 'border border-[#ff3b30]/30 bg-[#ff3b30]/5 text-[#ff3b30] hover:bg-[#ff3b30]/10'
+                    }`}
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <span>Keluar</span>
+                  </button>
+                </div>
+              </div>
+
               <div className="mt-6 flex flex-wrap justify-end gap-2 sm:mt-7 sm:gap-3">
-                <button type="button" onClick={() => setIsSettingsOpen(false)} className="min-h-11 rounded-full px-4 text-[14px] text-[#0066cc] hover:bg-[#f5f5f7] active:scale-95">Batal</button>
-                <button type="submit" disabled={isSettingsSaving} className="min-h-11 rounded-full bg-[#0066cc] px-5 text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95 disabled:opacity-60">{isSettingsSaving ? 'Menyimpan...' : 'Simpan'}</button>
+                <button type="button" onClick={() => setIsSettingsOpen(false)} className={`min-h-11 rounded-full px-4 text-[14px] active:scale-95 ${isDarkMode ? 'text-[#2997ff] hover:bg-white/10' : 'text-[#0066cc] hover:bg-[#f5f5f7]'}`}>Batal</button>
+                <button type="submit" disabled={isSettingsSaving} className={`min-h-11 rounded-full px-5 text-[14px] text-white transition-all active:scale-95 disabled:opacity-60 ${isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'}`}>{isSettingsSaving ? 'Menyimpan...' : 'Simpan'}</button>
               </div>
             </form>
-          </div>
+          </div>,
+          document.body
         )}
 
-        {isPremiumOfferOpen && (
+        {isMounted && isPremiumOfferOpen && createPortal(
           <div
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] animate-modal-backdrop sm:p-4"
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) {
                 setIsPremiumOfferOpen(false)
@@ -1817,98 +2238,121 @@ export default function Home() {
               }
             }}
           >
-            <section role="dialog" aria-modal="true" aria-labelledby="premium-offer-title" className="max-h-[90dvh] w-full max-w-[560px] overflow-y-auto overscroll-contain rounded-[18px] border border-[#e0e0e0] bg-white p-5 animate-modal-enter sm:max-h-[min(86vh,760px)] sm:p-8">
+            <section role="dialog" aria-modal="true" aria-labelledby="premium-offer-title" className={`max-h-[90dvh] w-full max-w-[560px] overflow-y-auto overscroll-contain rounded-[18px] border p-5 animate-modal-enter sm:max-h-[min(86vh,760px)] sm:p-8 shadow-2xl backdrop-blur-2xl ${
+              isDarkMode
+                ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7]'
+                : 'border-[#e0e0e0] bg-white/95 text-[#1d1d1f]'
+            }`}>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="mb-2 text-[12px] font-semibold text-[#0066cc]">NOTES PREMIUM</p>
-                  <h2 id="premium-offer-title" className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">Lebih banyak ruang untuk ide.</h2>
-                  <p className="mt-2 text-[17px] leading-[1.47] text-[#7a7a7a]">Pilih paket untuk langsung mengaktifkan Premium. Pembayaran belum diproses di aplikasi ini.</p>
+                  <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>NOTES PREMIUM</p>
+                  <h2 id="premium-offer-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Lebih banyak ruang untuk ide.</h2>
+                  <p className={`mt-2 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>Pilih paket untuk langsung mengaktifkan Premium. Pembayaran belum diproses di aplikasi ini.</p>
                 </div>
-                <button type="button" aria-label="Tutup penawaran Premium" onClick={() => { setIsPremiumOfferOpen(false); setOfferMessage('') }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] text-[#7a7a7a] hover:bg-[#f5f5f7] active:scale-95">×</button>
+                <button type="button" aria-label="Tutup penawaran Premium" onClick={() => { setIsPremiumOfferOpen(false); setOfferMessage('') }} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}>×</button>
               </div>
 
-              <ul className="mt-6 space-y-3 text-[17px] leading-[1.47] text-[#1d1d1f]">
-                <li className="flex gap-3"><span className="text-[#0066cc]">✓</span><span>Folder untuk mengelompokkan catatan</span></li>
-                <li className="flex gap-3"><span className="text-[#0066cc]">✓</span><span>Berbagi dan mengedit catatan bersama kolaborator</span></li>
-                <li className="flex gap-3"><span className="text-[#0066cc]">✓</span><span>Pin catatan tanpa batas</span></li>
+              <ul className={`mt-6 space-y-3 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>
+                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}>✓</span><span>Folder untuk mengelompokkan catatan</span></li>
+                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}>✓</span><span>Berbagi dan mengedit catatan bersama kolaborator</span></li>
+                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}>✓</span><span>Pin catatan tanpa batas</span></li>
               </ul>
 
               <div className="mt-6 grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:mt-7">
-                <button type="button" disabled={isActivatingPremium} onClick={() => activatePremiumPlan(1)} className="min-h-[84px] rounded-[11px] border border-[#e0e0e0] px-4 py-3 text-left transition-colors hover:bg-[#fafafc] active:scale-[0.98] disabled:opacity-60">
-                  <span className="block text-[14px] text-[#7a7a7a]">1 bulan</span>
-                  <span className="mt-1 block text-[21px] font-semibold tracking-[-0.2px] text-[#1d1d1f]">Rp10.000</span>
+                <button type="button" disabled={isActivatingPremium} onClick={() => activatePremiumPlan(1)} className={`min-h-[84px] rounded-[11px] border px-4 py-3 text-left transition-colors active:scale-[0.98] disabled:opacity-60 ${
+                  isDarkMode
+                    ? 'border-white/15 bg-white/5 hover:bg-white/10'
+                    : 'border-[#e0e0e0] bg-white hover:bg-[#fafafc]'
+                }`}>
+                  <span className={`block text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>1 bulan</span>
+                  <span className={`mt-1 block text-[21px] font-semibold tracking-[-0.2px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Rp10.000</span>
                 </button>
-                <button type="button" disabled={isActivatingPremium} onClick={() => activatePremiumPlan(12)} className="min-h-[84px] rounded-[11px] border border-[#e0e0e0] px-4 py-3 text-left transition-colors hover:bg-[#fafafc] active:scale-[0.98] disabled:opacity-60">
-                  <span className="block text-[14px] text-[#7a7a7a]">1 tahun</span>
-                  <span className="mt-1 block text-[21px] font-semibold tracking-[-0.2px] text-[#1d1d1f]">Rp90.000</span>
+                <button type="button" disabled={isActivatingPremium} onClick={() => activatePremiumPlan(12)} className={`min-h-[84px] rounded-[11px] border px-4 py-3 text-left transition-colors active:scale-[0.98] disabled:opacity-60 ${
+                  isDarkMode
+                    ? 'border-white/15 bg-white/5 hover:bg-white/10'
+                    : 'border-[#e0e0e0] bg-white hover:bg-[#fafafc]'
+                }`}>
+                  <span className={`block text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>1 tahun</span>
+                  <span className={`mt-1 block text-[21px] font-semibold tracking-[-0.2px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Rp90.000</span>
                 </button>
               </div>
 
-              {isActivatingPremium && <p role="status" className="mt-4 text-[14px] text-[#7a7a7a]">Mengaktifkan Premium...</p>}
-              {offerMessage && <p role="status" aria-live="polite" className="mt-4 rounded-[8px] bg-[#f5f5f7] p-3 text-[14px] leading-[1.47] text-[#1d1d1f]">{offerMessage}</p>}
+              {isActivatingPremium && <p role="status" className={`mt-4 text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>Mengaktifkan Premium...</p>}
+              {offerMessage && <p role="status" aria-live="polite" className={`mt-4 rounded-[8px] p-3 text-[14px] leading-[1.47] ${isDarkMode ? 'bg-white/5 text-[#f5f5f7]' : 'bg-[#f5f5f7] text-[#1d1d1f]'}`}>{offerMessage}</p>}
               <div className="mt-6 flex justify-end">
-                <button type="button" onClick={() => { setIsPremiumOfferOpen(false); setOfferMessage('') }} className="min-h-11 rounded-full bg-[#0066cc] px-[22px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95">Tutup</button>
+                <button type="button" onClick={() => { setIsPremiumOfferOpen(false); setOfferMessage('') }} className={`min-h-11 rounded-full px-[22px] text-[14px] text-white transition-all active:scale-95 ${isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'}`}>Tutup</button>
               </div>
             </section>
-          </div>
+          </div>,
+          document.body
         )}
 
-        {premiumDetailOpen && isPremium && (
+        {isMounted && premiumDetailOpen && isPremium && createPortal(
           <div
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] animate-modal-backdrop sm:p-4"
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setPremiumDetailOpen(false)
             }}
           >
-            <section role="dialog" aria-modal="true" aria-labelledby="premium-detail-title" className="max-h-[90dvh] w-full max-w-[480px] overflow-y-auto rounded-[18px] border border-[#e0e0e0] bg-white p-5 animate-modal-enter sm:p-8">
+            <section role="dialog" aria-modal="true" aria-labelledby="premium-detail-title" className={`max-h-[90dvh] w-full max-w-[480px] overflow-y-auto rounded-[18px] border p-5 animate-modal-enter sm:p-8 shadow-2xl backdrop-blur-2xl ${
+              isDarkMode
+                ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7]'
+                : 'border-[#e0e0e0] bg-white/95 text-[#1d1d1f]'
+            }`}>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="mb-2 text-[12px] font-semibold text-[#0066cc]">★ PREMIUM AKTIF</p>
-                  <h2 id="premium-detail-title" className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">Paket Premium</h2>
+                  <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>★ PREMIUM AKTIF</p>
+                  <h2 id="premium-detail-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Paket Premium</h2>
                 </div>
-                <button type="button" aria-label="Tutup detail paket" onClick={() => setPremiumDetailOpen(false)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] text-[#7a7a7a] hover:bg-[#f5f5f7] active:scale-95">×</button>
+                <button type="button" aria-label="Tutup detail paket" onClick={() => setPremiumDetailOpen(false)} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}>×</button>
               </div>
-              <p className="mt-4 text-[17px] leading-[1.47] text-[#1d1d1f]">
+              <p className={`mt-4 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>
                 {profile?.premium_expires_at
                   ? `Masa Premium berakhir pada ${new Date(profile.premium_expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}.`
                   : 'Tanggal berakhir Premium belum tercatat.'}
               </p>
-              <ul className="mt-5 space-y-2 text-[14px] leading-[1.47] text-[#7a7a7a]">
+              <ul className={`mt-5 space-y-2 text-[14px] leading-[1.47] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
                 <li>Folder catatan</li>
                 <li>Catatan bersama dan kolaborator</li>
                 <li>Pin catatan tanpa batas</li>
               </ul>
               <div className="mt-7 flex justify-end">
-                <button type="button" onClick={() => setPremiumDetailOpen(false)} className="min-h-11 rounded-full bg-[#0066cc] px-[22px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95">Tutup</button>
+                <button type="button" onClick={() => setPremiumDetailOpen(false)} className={`min-h-11 rounded-full px-[22px] text-[14px] text-white transition-all active:scale-95 ${isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'}`}>Tutup</button>
               </div>
             </section>
-          </div>
+          </div>,
+          document.body
         )}
 
-        {premiumSuccessExpiry && (
+        {isMounted && premiumSuccessExpiry && createPortal(
           <div
-            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 p-2 backdrop-blur-[3px] animate-modal-backdrop sm:p-4"
+            className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setPremiumSuccessExpiry(null)
             }}
           >
-            <section role="dialog" aria-modal="true" aria-labelledby="premium-success-title" className="max-h-[90dvh] w-full max-w-[480px] overflow-y-auto rounded-[18px] border border-[#e0e0e0] bg-white p-5 animate-modal-enter sm:p-8">
-              <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-full bg-[#f5f5f7] text-[21px] text-[#0066cc]" aria-hidden="true">★</div>
-              <p className="mb-2 text-[12px] font-semibold text-[#0066cc]">PREMIUM AKTIF</p>
-              <h2 id="premium-success-title" className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">Akunmu sekarang Premium.</h2>
-              <p className="mt-3 text-[17px] leading-[1.47] text-[#1d1d1f]">
+            <section role="dialog" aria-modal="true" aria-labelledby="premium-success-title" className={`max-h-[90dvh] w-full max-w-[480px] overflow-y-auto rounded-[18px] border p-5 animate-modal-enter sm:p-8 shadow-2xl backdrop-blur-2xl ${
+              isDarkMode
+                ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7]'
+                : 'border-[#e0e0e0] bg-white/95 text-[#1d1d1f]'
+            }`}>
+              <div className={`mb-5 flex h-11 w-11 items-center justify-center rounded-full text-[21px] ${isDarkMode ? 'bg-white/10 text-[#2997ff]' : 'bg-[#f5f5f7] text-[#0066cc]'}`} aria-hidden="true">★</div>
+              <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>PREMIUM AKTIF</p>
+              <h2 id="premium-success-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Akunmu sekarang Premium.</h2>
+              <p className={`mt-3 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>
                 Premium aktif sampai {new Date(premiumSuccessExpiry).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}. Tidak ada pembayaran yang diproses.
               </p>
-              <ul className="mt-5 space-y-2 text-[14px] leading-[1.47] text-[#7a7a7a]">
+              <ul className={`mt-5 space-y-2 text-[14px] leading-[1.47] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
                 <li>Folder untuk mengelompokkan catatan</li>
                 <li>Berbagi dan mengedit catatan bersama kolaborator</li>
                 <li>Pin catatan tanpa batas</li>
               </ul>
               <div className="mt-7 flex justify-end">
-                <button type="button" onClick={() => setPremiumSuccessExpiry(null)} className="min-h-11 rounded-full bg-[#0066cc] px-[22px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95">Mulai gunakan Premium</button>
+                <button type="button" onClick={() => setPremiumSuccessExpiry(null)} className={`min-h-11 rounded-full px-[22px] text-[14px] text-white transition-all active:scale-95 ${isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'}`}>Mulai gunakan Premium</button>
               </div>
             </section>
-          </div>
+          </div>,
+          document.body
         )}
       </main>
     </div>
