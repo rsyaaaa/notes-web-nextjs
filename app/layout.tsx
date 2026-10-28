@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import LanguageProvider from "@/components/LanguageProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -42,7 +43,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col font-sans bg-[#f5f5f7] text-[#1d1d1f]">
-        {children}
+        <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>
   );

@@ -20,6 +20,20 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Application language
+
+Signed-in users can open **Page List → Pengaturan Aplikasi / Application Settings** to choose **Bahasa Indonesia** or **English**, then save the change. Indonesian is the default for accounts without a preference.
+
+The preference is stored in Supabase Auth `user_metadata.language` (`id` or `en`) using `auth.updateUser`, not in a shared browser preference. It is restored from the signed-in account on other devices; no database migration is required. Signing out resets the UI to Indonesian. Language changes affect interface labels, accessibility text, and date formatting, not note content, user names, or folder names. Raw backend error details are left unchanged.
+
+Translation dictionaries live in `lib/i18n.ts`, `lib/i18n-home.ts`, and `lib/i18n-notes.ts`. Run the local regression checks with:
+
+```bash
+npm run test:language
+```
+
+These tests use a mocked auth client to check translations, per-account isolation, metadata save requests, save failures, session restoration, and stale async results. Cross-device persistence against a live Supabase project should also be checked with two test accounts.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -8,6 +8,7 @@ import { FaApple } from 'react-icons/fa'
 import { HiOutlineChevronDown, HiOutlineFolder, HiOutlineSearch, HiPlus, HiStar } from 'react-icons/hi'
 import { supabase } from '@/lib/supabaseClient'
 import type { Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
+import { useLanguage } from '@/components/LanguageProvider'
 
 interface DashboardNotesProps {
   user: User
@@ -26,14 +27,15 @@ interface MemberQueryResult {
 
 const ACCENT_COLORS = [
   { label: 'Putih', hex: '#ffffff', surface: '#ffffff', border: '#e0e0e0' },
-  { label: 'Parchment', hex: '#f5f5f7', surface: '#f5f5f7', border: '#e0e0e0' },
+  { label: 'Perkamen', hex: '#f5f5f7', surface: '#f5f5f7', border: '#e0e0e0' },
   { label: 'Kuning', hex: '#fef3c7', surface: '#fefce8', border: '#fde68a' },
   { label: 'Mint', hex: '#dcfce7', surface: '#f0fdf4', border: '#bbf7d0' },
-  { label: 'Sky', hex: '#e0f2fe', surface: '#f0f9ff', border: '#bae6fd' },
-  { label: 'Rose', hex: '#ffe4e6', surface: '#fff1f2', border: '#fecdd3' },
+  { label: 'Biru Langit', hex: '#e0f2fe', surface: '#f0f9ff', border: '#bae6fd' },
+  { label: 'Merah Muda', hex: '#ffe4e6', surface: '#fff1f2', border: '#fecdd3' },
 ]
 
 export default function DashboardNotes({ user, initialProfile, onLogout }: DashboardNotesProps) {
+  const { locale, t } = useLanguage()
   const router = useRouter()
 
   // State Data
@@ -114,7 +116,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
               if (!map[m.note_id]) map[m.note_id] = []
               map[m.note_id].push({
                 user_id: m.user_id,
-                full_name: m.profiles?.full_name || 'Kolaborator',
+                full_name: m.profiles?.full_name || '',
                 avatar_url: m.profiles?.avatar_url || null,
               })
             }
@@ -318,10 +320,10 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
     })
 
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return 'Baru saja'
+    if (!dateStr) return t('Baru saja')
     try {
       const d = new Date(dateStr)
-      return d.toLocaleDateString('id-ID', {
+      return d.toLocaleDateString(locale, {
         day: 'numeric',
         month: 'short',
         year: 'numeric',
@@ -337,9 +339,9 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
       <header className="sticky top-0 z-50 flex h-[44px] items-center justify-between border-b border-black/10 bg-[#000000] px-4 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
         <div className="flex items-center gap-2">
           <FaApple aria-hidden="true" className="text-base" />
-          <span className="font-semibold tracking-normal">Notes</span>
+          <span className="font-semibold tracking-normal">{t("Notes")}</span>
           <span className="ml-1 rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] text-white/90">
-            {isPremium ? <><HiStar aria-hidden="true" className="inline align-middle" /> Premium</> : 'Free Plan'}
+            {isPremium ? <><HiStar aria-hidden="true" className="inline align-middle" /> {t("Premium")}</> : t('Free Plan')}
           </span>
         </div>
 
@@ -347,7 +349,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
         <div className="relative">
           <button
             type="button"
-            aria-label="Menu akun"
+            aria-label={t("Menu akun")}
             aria-expanded={isProfileMenuOpen}
             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
             className="flex min-h-[32px] items-center gap-2 rounded-full px-2 text-white hover:bg-white/10 transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3]"
@@ -366,14 +368,16 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
           {isProfileMenuOpen && (
             <div className="absolute right-0 top-[40px] z-50 w-56 rounded-[14px] border border-[#e0e0e0] bg-white p-2 text-[#1d1d1f] shadow-none">
               <div className="border-b border-[#f0f0f0] px-3 py-2">
-                <p className="truncate text-[14px] font-semibold">{profile?.full_name || 'Pengguna'}</p>
+                <p className="truncate text-[14px] font-semibold">{profile?.full_name || t('Pengguna')}</p>
                 <p className="truncate text-[12px] text-[#7a7a7a]">{user.email}</p>
               </div>
               <div className="flex items-center justify-between border-b border-[#f0f0f0] px-3 py-2 text-[14px]">
-                <span>Tampilan gelap</span>
+                <span>{t("Tampilan gelap")}</span>
                 <button
                   type="button"
                   onClick={toggleDarkMode}
+                  aria-label={t('Tampilan gelap')}
+                  aria-pressed={isDarkMode}
                   className={`h-5 w-9 rounded-full transition-colors relative ${isDarkMode ? 'bg-[#0066cc]' : 'bg-[#d2d2d7]'}`}
                 >
                   <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${isDarkMode ? 'translate-x-4' : ''}`} />
@@ -384,7 +388,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                 onClick={onLogout}
                 className="mt-1 w-full rounded-[8px] px-3 py-2 text-left text-[14px] text-[#0066cc] hover:bg-[#f5f5f7] active:scale-95 transition-transform"
               >
-                Keluar
+                {t("Keluar")}
               </button>
             </div>
           )}
@@ -395,7 +399,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
       <nav className="sticky top-[44px] z-40 flex min-h-[52px] flex-wrap items-center justify-between border-b border-[#e0e0e0] bg-[#f5f5f7]/80 px-4 py-2 backdrop-blur-md sm:px-6 md:px-12">
         <div className="flex items-center gap-3 sm:gap-6">
           <h1 className="text-[18px] sm:text-[21px] font-semibold tracking-[0.231px] text-[#1d1d1f]">
-            {activeTab === 'notes' ? 'Catatan Saya' : 'Sampah'}
+            {activeTab === 'notes' ? t('Catatan Saya') : t('Sampah')}
           </h1>
           <div className="flex items-center rounded-full bg-black/5 p-0.5 text-[12px]">
             <button
@@ -405,7 +409,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                 activeTab === 'notes' ? 'bg-white font-semibold text-[#1d1d1f]' : 'text-[#7a7a7a]'
               }`}
             >
-              Catatan ({activeNotes.length})
+              {t('Catatan ({count})', { count: activeNotes.length })}
             </button>
             <button
               type="button"
@@ -414,7 +418,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                 activeTab === 'trash' ? 'bg-white font-semibold text-[#1d1d1f]' : 'text-[#7a7a7a]'
               }`}
             >
-              Sampah ({trashedNotes.length})
+              {t('Sampah ({count})', { count: trashedNotes.length })}
             </button>
           </div>
         </div>
@@ -426,7 +430,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
             onClick={handleNewNoteClick}
             className="flex min-h-[38px] items-center rounded-full bg-[#0066cc] px-4 text-[14px] font-normal text-white transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3]"
           >
-            <HiPlus aria-hidden="true" className="mr-1 shrink-0" /> Catatan Baru
+            <HiPlus aria-hidden="true" className="mr-1 shrink-0" /> {t("Catatan Baru")}
           </button>
         ) : (
           trashedNotes.length > 0 && (
@@ -435,7 +439,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
               onClick={handleEmptyTrash}
               className="flex min-h-[38px] items-center rounded-full border border-[#e0e0e0] bg-white px-4 text-[14px] font-normal text-[#ff3b30] transition-transform active:scale-95"
             >
-              Kosongkan Sampah
+              {t("Kosongkan Sampah")}
             </button>
           )
         )}
@@ -454,7 +458,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari catatan..."
+              placeholder={t("Cari catatan...")}
               className="h-[44px] w-full rounded-full border border-black/10 bg-white pl-9 pr-4 text-[17px] font-normal tracking-[-0.374px] text-[#1d1d1f] placeholder-[#7a7a7a]/60 outline-none focus-visible:outline-2 focus-visible:outline-[#0071e3]"
             />
           </div>
@@ -463,13 +467,13 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
           {activeTab === 'notes' && isPremium && (
             <div className="flex flex-wrap items-center gap-2">
               <select
-                aria-label="Filter berdasarkan folder"
+                aria-label={t("Filter berdasarkan folder")}
                 value={folderFilter}
                 onChange={(e) => setFolderFilter(e.target.value)}
                 className="h-[44px] rounded-full border border-black/10 bg-white px-4 text-[14px] text-[#1d1d1f] outline-none focus-visible:outline-2 focus-visible:outline-[#0071e3]"
               >
-                <option value="all">Semua Folder</option>
-                <option value="none">Tanpa Folder</option>
+                <option value="all">{t("Semua Folder")}</option>
+                <option value="none">{t("Tanpa Folder")}</option>
                 {folders.map((f) => (
                   <option key={f.id} value={String(f.id)}>
                     {f.name}
@@ -485,14 +489,16 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                     autoFocus
                     value={folderName}
                     onChange={(e) => setFolderName(e.target.value)}
-                    placeholder="Nama folder"
+                    onInvalid={(e) => e.currentTarget.setCustomValidity(t('Nama folder wajib diisi.'))}
+                    onInput={(e) => e.currentTarget.setCustomValidity('')}
+                    placeholder={t("Nama folder")}
                     className="h-[44px] w-36 rounded-full border border-[#e0e0e0] bg-white px-3 text-[14px] text-[#1d1d1f] outline-none focus-visible:outline-2 focus-visible:outline-[#0071e3]"
                   />
                   <button type="submit" className="min-h-[44px] rounded-full bg-[#0066cc] px-3 text-[14px] text-white active:scale-95">
-                    Buat
+                    {t("Buat")}
                   </button>
                   <button type="button" onClick={() => setIsCreatingFolder(false)} className="text-[14px] text-[#0066cc] px-2 active:scale-95">
-                    Batal
+                    {t("Batal")}
                   </button>
                 </form>
               ) : (
@@ -501,7 +507,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                   onClick={() => setIsCreatingFolder(true)}
                   className="flex min-h-[44px] items-center rounded-full border border-[#0066cc] px-4 text-[14px] font-normal text-[#0066cc] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3]"
                 >
-                  <HiPlus aria-hidden="true" className="mr-1 shrink-0" /> Folder
+                  <HiPlus aria-hidden="true" className="mr-1 shrink-0" /> {t("Folder")}
                 </button>
               )}
             </div>
@@ -512,16 +518,16 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
         {activeTab === 'notes' ? (
           activeNotes.length === 0 ? (
             <div className="py-24 text-center">
-              <p className="text-[21px] font-semibold tracking-[-0.28px] text-[#1d1d1f]">Belum ada catatan</p>
+              <p className="text-[21px] font-semibold tracking-[-0.28px] text-[#1d1d1f]">{t("Belum ada catatan")}</p>
               <p className="mt-2 text-[17px] leading-[1.47] tracking-[-0.374px] text-[#7a7a7a]">
-                Klik &quot;<HiPlus aria-hidden="true" className="inline align-middle" /> Catatan Baru&quot; di atas untuk mulai menulis ide dan rencanamu.
+                {t('Klik "{action}" di atas untuk mulai menulis ide dan rencanamu.', { action: t('Catatan Baru') })}
               </p>
               <button
                 type="button"
                 onClick={handleNewNoteClick}
                 className="mt-6 inline-flex min-h-11 items-center rounded-full bg-[#0066cc] px-6 text-[17px] font-normal text-white transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3]"
               >
-                <HiPlus aria-hidden="true" className="mr-1 shrink-0" /> Catatan Baru
+                <HiPlus aria-hidden="true" className="mr-1 shrink-0" /> {t("Catatan Baru")}
               </button>
             </div>
           ) : (
@@ -549,25 +555,25 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                       {/* Card Header: Title & Pin Indicator */}
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="min-w-0 flex-1 truncate text-[17px] font-semibold tracking-[-0.374px] text-[#1d1d1f]">
-                          {note.title || 'Tanpa Judul'}
+                          {note.title || t('Tanpa Judul')}
                         </h3>
                         {note.user_id === user.id && (
                           <button
                             type="button"
-                            aria-label={note.is_pinned ? 'Lepas pin catatan' : 'Pin catatan'}
+                            aria-label={note.is_pinned ? t('Lepas pin catatan') : t('Pin catatan')}
                             onClick={(e) => togglePin(note, e)}
                             className={`min-h-[28px] rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition-transform active:scale-95 ${
                               note.is_pinned ? 'bg-[#0066cc] text-white' : 'bg-black/5 text-[#7a7a7a] hover:bg-black/10'
                             }`}
                           >
-                            {note.is_pinned ? 'Pinned' : 'Pin'}
+                            {note.is_pinned ? t('Dipin') : t('Sematkan')}
                           </button>
                         )}
                       </div>
 
                       {/* Card Snippet (17px body, 1.47 line height) */}
                       <p className="mt-3 line-clamp-4 text-[17px] font-normal leading-[1.47] tracking-[-0.374px] text-[#1d1d1f]/85 whitespace-pre-wrap">
-                        {note.content || 'Gak ada isi teks...'}
+                        {note.content || t('Gak ada isi teks...')}
                       </p>
                     </div>
 
@@ -589,13 +595,13 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                           {(notePeopleById[note.id] ?? []).slice(0, 3).map((p) => (
                             <span
                               key={p.user_id}
-                              title={p.full_name}
+                              title={p.full_name || t('Kolaborator')}
                               className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-[#f5f5f7] text-[10px] text-[#1d1d1f]"
                             >
                               {p.avatar_url ? (
                                 <Image src={p.avatar_url} alt="" width={24} height={24} className="h-full w-full rounded-full object-cover" unoptimized />
                               ) : (
-                                (p.full_name || 'U').slice(0, 1).toUpperCase()
+                                (p.full_name || t('Kolaborator')).slice(0, 1).toUpperCase()
                               )}
                             </span>
                           ))}
@@ -605,14 +611,14 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                         {note.user_id === user.id && (
                           <button
                             type="button"
-                            aria-label="Pindahkan ke sampah"
+                            aria-label={t("Pindahkan ke sampah")}
                             onClick={(e) => {
                               e.stopPropagation()
                               handleTrashToggle(note, true)
                             }}
                             className="text-[12px] text-[#0066cc] hover:underline active:scale-95"
                           >
-                            Buang
+                            {t("Buang")}
                           </button>
                         )}
                       </div>
@@ -626,9 +632,9 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
           /* Trashed Notes Grid */
           trashedNotes.length === 0 ? (
             <div className="py-24 text-center">
-              <p className="text-[21px] font-semibold tracking-[-0.28px] text-[#1d1d1f]">Sampah kosong</p>
+              <p className="text-[21px] font-semibold tracking-[-0.28px] text-[#1d1d1f]">{t("Sampah kosong")}</p>
               <p className="mt-2 text-[17px] leading-[1.47] tracking-[-0.374px] text-[#7a7a7a]">
-                Catatan yang kamu buang akan muncul di sini.
+                {t("Catatan yang kamu buang akan muncul di sini.")}
               </p>
             </div>
           ) : (
@@ -640,10 +646,10 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                 >
                   <div>
                     <h3 className="truncate text-[17px] font-semibold tracking-[-0.374px] text-[#1d1d1f]">
-                      {note.title || 'Tanpa Judul'}
+                      {note.title || t('Tanpa Judul')}
                     </h3>
                     <p className="mt-2 line-clamp-3 text-[17px] font-normal leading-[1.47] tracking-[-0.374px] text-[#7a7a7a]">
-                      {note.content || 'Tidak ada isi'}
+                      {note.content || t('Tidak ada isi')}
                     </p>
                   </div>
                   <div className="mt-6 flex items-center justify-between border-t border-[#f0f0f0] pt-3 text-[14px]">
@@ -652,14 +658,14 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                       onClick={() => handleTrashToggle(note, false)}
                       className="text-[#0066cc] hover:underline active:scale-95"
                     >
-                      Pulihkan
+                      {t("Pulihkan")}
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePermanentDelete(note.id)}
                       className="text-[#ff3b30] hover:underline active:scale-95"
                     >
-                      Hapus Permanen
+                      {t("Hapus Permanen")}
                     </button>
                   </div>
                 </article>
@@ -685,14 +691,14 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
           >
             <div className="flex items-center justify-between border-b border-black/5 pb-3">
               <span className="text-[14px] text-[#7a7a7a]">
-                {editingNoteId ? 'Edit Catatan' : 'Catatan Baru'}
+                {editingNoteId ? t('Edit Catatan') : t('Catatan Baru')}
               </span>
               <button
                 type="button"
                 onClick={() => setIsFormOpen(false)}
                 className="text-[14px] text-[#0066cc] active:scale-95"
               >
-                Tutup
+                {t("Tutup")}
               </button>
             </div>
 
@@ -702,13 +708,13 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                 autoFocus
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Judul Catatan"
+                placeholder={t("Judul Catatan")}
                 className="w-full bg-transparent text-[24px] font-semibold tracking-[-0.374px] text-[#1d1d1f] placeholder-[#7a7a7a]/50 outline-none"
               />
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Tulis catatanmu di sini..."
+                placeholder={t("Tulis catatanmu di sini...")}
                 rows={8}
                 className="w-full resize-none bg-transparent text-[17px] font-normal leading-[1.47] tracking-[-0.374px] text-[#1d1d1f] placeholder-[#7a7a7a]/50 outline-none"
               />
@@ -720,7 +726,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                     <button
                       key={c.hex}
                       type="button"
-                      aria-label={c.label}
+                      aria-label={t(c.label)}
                       onClick={() => setAccentColor(c.hex)}
                       className={`h-6 w-6 rounded-full border-2 transition-transform active:scale-95 ${
                         accentColor.toLowerCase() === c.hex.toLowerCase() ? 'border-[#0066cc] scale-110' : 'border-transparent'
@@ -736,14 +742,14 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                     onClick={() => setIsFormOpen(false)}
                     className="min-h-10 rounded-full px-4 text-[14px] text-[#0066cc] active:scale-95"
                   >
-                    Batal
+                    {t("Batal")}
                   </button>
                   <button
                     type="submit"
                     disabled={isSaving}
                     className="min-h-10 rounded-full bg-[#0066cc] px-5 text-[14px] font-normal text-white active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] disabled:opacity-50"
                   >
-                    {isSaving ? 'Menyimpan...' : 'Simpan'}
+                    {isSaving ? t('Menyimpan...') : t('Simpan')}
                   </button>
                 </div>
               </div>

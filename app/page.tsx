@@ -11,6 +11,9 @@ import { HiStar, HiOutlineChevronDown, HiOutlineDocumentText, HiOutlineTrash, Hi
 import { BsPin, BsPinFill } from 'react-icons/bs'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
 import AppleNoteLoader from '@/components/AppleNoteLoader'
+import NewNoteButton from '@/components/NewNoteButton'
+import { useLanguage } from '@/components/LanguageProvider'
+import ApplicationSettings from '@/components/ApplicationSettings'
 
 // Interface Data Catatan sesuai Skema Supabase
 interface Note {
@@ -49,6 +52,7 @@ interface NotePerson {
 export default function Home() {
   const router = useRouter()
   const pathname = usePathname()
+  const { locale, t } = useLanguage()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(supabaseConfigReady)
   const [notes, setNotes] = useState<Note[]>([])
@@ -85,6 +89,7 @@ export default function Home() {
   const isMounted = useSyncExternalStore(() => () => {}, () => true, () => false)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isApplicationSettingsOpen, setIsApplicationSettingsOpen] = useState(false)
   const [settingsName, setSettingsName] = useState('')
   const [settingsPassword, setSettingsPassword] = useState('')
   const [showSettingsPassword, setShowSettingsPassword] = useState(false)
@@ -145,7 +150,7 @@ export default function Home() {
   }, [isPageListClosing])
 
   useEffect(() => {
-    if (isPageListOpen || isSettingsOpen || premiumDetailOpen || isPremiumOfferOpen || isFormOpen || confirmation || premiumSuccessExpiry) {
+    if (isPageListOpen || isSettingsOpen || isApplicationSettingsOpen || premiumDetailOpen || isPremiumOfferOpen || isFormOpen || confirmation || premiumSuccessExpiry) {
       const originalOverflow = document.body.style.overflow
       const originalTouchAction = document.body.style.touchAction
       document.body.style.overflow = 'hidden'
@@ -155,7 +160,7 @@ export default function Home() {
         document.body.style.touchAction = originalTouchAction
       }
     }
-  }, [isPageListOpen, isSettingsOpen, premiumDetailOpen, isPremiumOfferOpen, isFormOpen, confirmation, premiumSuccessExpiry])
+  }, [isPageListOpen, isSettingsOpen, isApplicationSettingsOpen, premiumDetailOpen, isPremiumOfferOpen, isFormOpen, confirmation, premiumSuccessExpiry])
 
   const toggleDarkMode = () => {
     const nextMode = !isDarkMode
@@ -289,18 +294,18 @@ export default function Home() {
 
   // Each accent keeps its saved light value and uses a coordinated surface in dark mode.
   const colorOptions = [
-    { label: 'White', value: '#ffffff', darkValue: '#272729' },
-    { label: 'Parchment', value: '#f5f5f7', darkValue: '#303033' },
-    { label: 'Soft Blue', value: '#e8f2ff', darkValue: '#26364a' },
-    { label: 'Sky', value: '#eaf6ff', darkValue: '#263949' },
-    { label: 'Soft Amber', value: '#fff8e6', darkValue: '#403721' },
-    { label: 'Soft Mint', value: '#eafaf1', darkValue: '#263d32' },
-    { label: 'Rose', value: '#fff0f2', darkValue: '#432d34' },
-    { label: 'Lavender', value: '#f2edff', darkValue: '#352f45' },
-    { label: 'Peach', value: '#fff0e6', darkValue: '#453329' },
-    { label: 'Teal', value: '#e6f7f7', darkValue: '#263d40' },
-    { label: 'Sage', value: '#edf4e8', darkValue: '#323c29' },
-    { label: 'Silver', value: '#eceff1', darkValue: '#30363b' },
+    { label: t('Putih'), value: '#ffffff', darkValue: '#272729' },
+    { label: t('Perkamen'), value: '#f5f5f7', darkValue: '#303033' },
+    { label: t('Biru Lembut'), value: '#e8f2ff', darkValue: '#26364a' },
+    { label: t('Biru Langit'), value: '#eaf6ff', darkValue: '#263949' },
+    { label: t('Kuning Amber Lembut'), value: '#fff8e6', darkValue: '#403721' },
+    { label: t('Hijau Mint Lembut'), value: '#eafaf1', darkValue: '#263d32' },
+    { label: t('Merah Mawar'), value: '#fff0f2', darkValue: '#432d34' },
+    { label: t('Lavendel'), value: '#f2edff', darkValue: '#352f45' },
+    { label: t('Persik'), value: '#fff0e6', darkValue: '#453329' },
+    { label: t('Hijau Kebiruan'), value: '#e6f7f7', darkValue: '#263d40' },
+    { label: t('Hijau Sage'), value: '#edf4e8', darkValue: '#323c29' },
+    { label: t('Perak'), value: '#eceff1', darkValue: '#30363b' },
   ]
 
   const getAccentSurface = (value: string) =>
@@ -410,11 +415,11 @@ export default function Home() {
     if (result.error) {
       const errorMessage = result.error.message
       setAuthMessage(errorMessage.toLowerCase().includes('email rate limit exceeded')
-        ? 'Batas pengiriman email Supabase sedang tercapai. Permintaan daftar ini ditolak, jadi akun kemungkinan belum dibuat. Tunggu sampai batas pulih, lalu coba sekali lagi.'
+        ? t('Batas pengiriman email Supabase sedang tercapai. Permintaan daftar ini ditolak, jadi akun kemungkinan belum dibuat. Tunggu sampai batas pulih, lalu coba sekali lagi.')
         : errorMessage)
     } else if (authMode === 'register' && !result.data.session) {
       setVerificationEmail(authEmail.trim())
-      setAuthMessage('Akun berhasil dibuat. Periksa email untuk konfirmasi sebelum masuk.')
+      setAuthMessage(t('Akun berhasil dibuat. Periksa email untuk konfirmasi sebelum masuk.'))
     }
     setIsAuthSubmitting(false)
   }
@@ -422,7 +427,7 @@ export default function Home() {
   const resendSignupVerification = async () => {
     const email = verificationEmail || authEmail.trim()
     if (!email) {
-      setAuthMessage('Masukkan email yang digunakan saat mendaftar.')
+      setAuthMessage(t('Masukkan email yang digunakan saat mendaftar.'))
       return
     }
 
@@ -434,8 +439,8 @@ export default function Home() {
       options: { emailRedirectTo: `${window.location.origin}/` },
     })
     setAuthMessage(error
-      ? `Email verifikasi belum dapat dikirim: ${error.message}`
-      : `Permintaan kirim ulang untuk ${email} berhasil. Periksa Inbox dan folder Spam.`)
+      ? t('Email verifikasi belum dapat dikirim: {error}', { error: error.message })
+      : t('Permintaan kirim ulang untuk {email} berhasil. Periksa Inbox dan folder Spam.', { email }))
     setIsResendingVerification(false)
   }
 
@@ -471,7 +476,7 @@ export default function Home() {
     }
 
     await fetchProfile(user)
-    setSettingsMessage('Pengaturan akun tersimpan.')
+    setSettingsMessage(t('Pengaturan akun tersimpan.'))
     setIsSettingsSaving(false)
   }
 
@@ -480,7 +485,7 @@ export default function Home() {
     const file = event.target.files?.[0]
     if (!file) return
     if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) {
-      setSettingsMessage('Pilih gambar dengan ukuran maksimal 5 MB.')
+      setSettingsMessage(t('Pilih gambar dengan ukuran maksimal 5 MB.'))
       return
     }
 
@@ -502,7 +507,7 @@ export default function Home() {
     if (profileError) setSettingsMessage(profileError.message)
     else {
       await fetchProfile(user)
-      setSettingsMessage('Foto profil berhasil diperbarui.')
+      setSettingsMessage(t('Foto profil berhasil diperbarui.'))
     }
     setIsSettingsSaving(false)
     event.target.value = ''
@@ -525,10 +530,10 @@ export default function Home() {
     const email = inviteEmail.trim()
     if (!email) return
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setSharingMessage('Masukkan alamat email yang valid.')
+      setSharingMessage(t('Masukkan alamat email yang valid.'))
       return
     }
-    setSharingMessage('Mengirim undangan...')
+    setSharingMessage(t('Mengirim undangan...'))
     const { data, error } = await supabase.rpc('invite_note_collaborator', {
       target_note_id: editingNoteId,
       collaborator_email: email,
@@ -538,7 +543,7 @@ export default function Home() {
       return
     }
     setInviteEmail('')
-    setSharingMessage('Kolaborator berhasil ditambahkan.')
+    setSharingMessage(t('Kolaborator berhasil ditambahkan.'))
     setNoteMembers((members) => {
       const invited = data?.[0]
       if (!invited || members.some((member) => member.user_id === invited.user_id)) return members
@@ -795,7 +800,7 @@ export default function Home() {
       noteTitleInputRef.current?.setSelectionRange(0, 0)
       noteTitleInputRef.current?.scrollTo({ left: 0 })
     }
-  }, [editingNoteId, isFormOpen])
+  }, [editingNoteId, isFormOpen, t])
 
   useEffect(() => {
     if (!isFormOpen || editingNoteId === null || !user) {
@@ -866,7 +871,7 @@ export default function Home() {
         const localDraft = currentDraftRef.current
         const savedDraft = savedDraftRef.current
         if (JSON.stringify(localDraft) !== JSON.stringify(savedDraft)) {
-          setSharingMessage('Kolaborator menyimpan perubahan. Simpan draft ini untuk mempertahankan versimu.')
+          setSharingMessage(t('Kolaborator menyimpan perubahan. Simpan draft ini untuk mempertahankan versimu.'))
           return
         }
 
@@ -889,10 +894,10 @@ export default function Home() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [editingNoteId, isFormOpen])
+  }, [editingNoteId, isFormOpen, t])
 
   useEffect(() => {
-    if (!isFormOpen && !confirmation && !isPremiumOfferOpen && !premiumDetailOpen && !isSettingsOpen) return
+    if (!isFormOpen && !confirmation && !isPremiumOfferOpen && !premiumDetailOpen && !isSettingsOpen && !isApplicationSettingsOpen) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         closeNoteForm()
@@ -901,11 +906,12 @@ export default function Home() {
         setIsPremiumOfferOpen(false)
         setPremiumDetailOpen(false)
         setIsSettingsOpen(false)
+        setIsApplicationSettingsOpen(false)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [closeNoteForm, confirmation, isFormOpen, isFormClosing, isPremiumOfferOpen, premiumDetailOpen, isSettingsOpen])
+  }, [closeNoteForm, confirmation, isFormOpen, isFormClosing, isPremiumOfferOpen, premiumDetailOpen, isSettingsOpen, isApplicationSettingsOpen])
 
   useEffect(() => {
     const expiresAt = profile?.premium_expires_at
@@ -924,7 +930,7 @@ export default function Home() {
     if (!note.is_pinned && note.user_id === user.id && !isPremium) {
       const currentPinnedCount = notes.filter((item) => item.user_id === user.id && item.is_pinned && !item.is_trashed).length
       if (currentPinnedCount >= 3) {
-        setPremiumMessage('Paket Free memiliki batas 3 catatan pin. Premium membuka pin tanpa batas.')
+        setPremiumMessage(t('Paket Free memiliki batas 3 catatan pin. Premium membuka pin tanpa batas.'))
         return
       }
     }
@@ -971,7 +977,7 @@ export default function Home() {
         .delete()
         .eq('user_id', user.id)
         .eq('is_trashed', true)
-      if (error) setPremiumMessage(`Gagal menghapus catatan: ${error.message}`)
+      if (error) setPremiumMessage(t('Gagal menghapus catatan: {error}', { error: error.message }))
       else await fetchNotes(user.id)
       return
     }
@@ -982,7 +988,7 @@ export default function Home() {
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr)
-    return d.toLocaleDateString('id-ID', {
+    return d.toLocaleDateString(locale, {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
@@ -1012,7 +1018,7 @@ export default function Home() {
     })
 
     if (error || !data) {
-      setOfferMessage(error?.message || 'Paket belum dapat diaktifkan. Coba lagi.')
+      setOfferMessage(error?.message || t('Paket belum dapat diaktifkan. Coba lagi.'))
       setIsActivatingPremium(false)
       return
     }
@@ -1033,15 +1039,15 @@ export default function Home() {
         isDark={isDarkMode}
         title={
           openingNoteId === 'new'
-            ? 'Membuat Catatan...'
+            ? t('Membuat Catatan...')
             : openingNoteId !== null
-            ? 'Membuka Catatan...'
-            : 'Memuat Notes...'
+            ? t('Membuka Catatan...')
+            : t('Memuat Notes...')
         }
         subtitle={
           openingNoteId !== null
-            ? 'Menyiapkan ruang tenang untuk idemu'
-            : 'Menyiapkan catatanmu'
+            ? t('Menyiapkan ruang tenang untuk idemu')
+            : t('Menyiapkan catatanmu')
         }
       />
     )
@@ -1051,9 +1057,9 @@ export default function Home() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f5f5f7] px-5 py-10 font-sans text-[#1d1d1f]">
         <section className="w-full max-w-[520px] rounded-[18px] border border-[#e0e0e0] bg-white p-6 sm:p-8">
-          <h1 className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">Konfigurasi Supabase belum tersedia</h1>
+          <h1 className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">{t('Konfigurasi Supabase belum tersedia')}</h1>
           <p className="mt-3 text-[17px] leading-[1.47] text-[#7a7a7a]">
-            Tambahkan environment variables berikut pada Vercel untuk Production, Preview, dan Development, lalu redeploy.
+            {t('Tambahkan environment variables berikut pada Vercel untuk Production, Preview, dan Development, lalu redeploy.')}
           </p>
           <ul className="mt-5 space-y-2 text-[14px] text-[#1d1d1f]">
             <li><code className="rounded-[5px] bg-[#f5f5f7] px-2 py-1">NEXT_PUBLIC_SUPABASE_URL</code></li>
@@ -1070,24 +1076,24 @@ export default function Home() {
       <main className={`min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans ${isDarkMode ? 'theme-dark' : ''}`}>
         <header className="flex h-[44px] items-center justify-between gap-3 bg-black px-4 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
           <span className="font-semibold text-sm"><FaApple aria-hidden="true" className="mr-1 inline-block align-middle" /> Notes</span>
-          <span>Catatan pribadimu</span>
+          <span>{t('Catatan pribadimu')}</span>
         </header>
         <div data-auth-layout className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1120px] items-center justify-center gap-16 px-4 py-8 sm:px-6 sm:py-12 lg:justify-between">
           <section className="hidden max-w-[470px] lg:block">
             <h1 className="text-[56px] font-semibold leading-[1.07] tracking-[-0.374px]">
-              Ruang tenang untuk semua idemu.
+              {t('Ruang tenang untuk semua idemu.')}
             </h1>
             <p className="mt-5 text-[21px] leading-[1.47] text-[#7a7a7a]">
-              Simpan catatan, rencana, dan pemikiran penting dalam satu tempat.
+              {t('Simpan catatan, rencana, dan pemikiran penting dalam satu tempat.')}
             </p>
           </section>
 
           <section data-auth-card className="w-full max-w-[420px] rounded-[18px] border border-[#e0e0e0] bg-white p-5 sm:p-8">
             <h1 className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">
-              {authMode === 'login' ? 'Selamat datang kembali' : 'Buat akun Notes'}
+              {authMode === 'login' ? t('Selamat datang kembali') : t('Buat akun Notes')}
             </h1>
             <p className="mt-2 text-[17px] leading-[1.47] text-[#7a7a7a]">
-              {authMode === 'login' ? 'Masuk untuk membuka catatanmu.' : 'Daftar untuk mulai menyimpan catatan.'}
+              {authMode === 'login' ? t('Masuk untuk membuka catatanmu.') : t('Daftar untuk mulai menyimpan catatan.')}
             </p>
 
             <div className="mt-6 grid grid-cols-2 rounded-full bg-[#f5f5f7] p-1 text-[14px]">
@@ -1095,18 +1101,18 @@ export default function Home() {
                 type="button"
                 onClick={() => { setAuthMode('login'); setAuthMessage('') }}
                 className={`min-h-10 rounded-full transition-all active:scale-95 ${authMode === 'login' ? 'bg-white text-[#1d1d1f]' : 'text-[#7a7a7a]'}`}
-              >Masuk</button>
+              >{t('Masuk')}</button>
               <button
                 type="button"
                 onClick={() => { setAuthMode('register'); setAuthMessage('') }}
                 className={`min-h-10 rounded-full transition-all active:scale-95 ${authMode === 'register' ? 'bg-white text-[#1d1d1f]' : 'text-[#7a7a7a]'}`}
-              >Daftar</button>
+              >{t('Daftar')}</button>
             </div>
 
             <form onSubmit={handleEmailAuth} className="mt-6 space-y-4">
               {authMode === 'register' && (
                 <label className="block text-[14px] text-[#333333]">
-                  Nama
+                  {t('Nama')}
                   <input
                     required
                     autoComplete="name"
@@ -1117,7 +1123,7 @@ export default function Home() {
                 </label>
               )}
               <label className="block text-[14px] text-[#333333]">
-                Email
+                {t('Email')}
                 <input
                   required
                   type="email"
@@ -1128,7 +1134,7 @@ export default function Home() {
                 />
               </label>
               <label className="block text-[14px] text-[#333333]">
-                Password
+                {t('Kata sandi')}
                 <span className="mt-2 flex h-11 items-center rounded-[8px] border border-[#e0e0e0] bg-white focus-within:ring-2 focus-within:ring-[#0071e3]">
                   <input
                     required
@@ -1141,11 +1147,11 @@ export default function Home() {
                   />
                   <button
                     type="button"
-                    aria-label={showAuthPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                    aria-label={showAuthPassword ? t('Sembunyikan password') : t('Tampilkan password')}
                     aria-pressed={showAuthPassword}
                     onClick={() => setShowAuthPassword((visible) => !visible)}
                     className="h-11 rounded-full px-3 text-[12px] text-[#0066cc] active:scale-95"
-                  >{showAuthPassword ? 'Sembunyikan' : 'Tampilkan'}</button>
+                  >{showAuthPassword ? t('Sembunyikan') : t('Tampilkan')}</button>
                 </span>
               </label>
               {authMessage && <p role="status" className="text-[14px] leading-[1.4] text-[#1d1d1f]">{authMessage}</p>}
@@ -1157,10 +1163,10 @@ export default function Home() {
                     onClick={resendSignupVerification}
                     className="min-h-11 rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] transition-colors hover:bg-[#0066cc]/5 active:scale-95 disabled:opacity-60"
                   >
-                    {isResendingVerification ? 'Mengirim...' : 'Kirim Ulang Email Verifikasi'}
+                    {isResendingVerification ? t('Mengirim...') : t('Kirim Ulang Email Verifikasi')}
                   </button>
                   <p className="text-[12px] leading-[1.45] text-[#7a7a7a]">
-                    Periksa Inbox dan folder Spam. Jika email tidak terkirim, proyek Supabase mungkin perlu SMTP khusus atau menunggu batas kirim pulih.
+                    {t('Periksa Inbox dan folder Spam. Jika email tidak terkirim, proyek Supabase mungkin perlu SMTP khusus atau menunggu batas kirim pulih.')}
                   </p>
                 </div>
               )}
@@ -1168,18 +1174,18 @@ export default function Home() {
                 type="submit"
                 disabled={isAuthSubmitting}
                 className="min-h-11 w-full rounded-full bg-[#0066cc] px-5 text-[17px] text-white transition-all hover:bg-[#0071e3] active:scale-[0.98] disabled:opacity-60"
-              >{isAuthSubmitting ? 'Memproses...' : authMode === 'login' ? 'Masuk' : 'Buat Akun'}</button>
+              >{isAuthSubmitting ? t('Memproses...') : authMode === 'login' ? t('Masuk') : t('Buat Akun')}</button>
             </form>
 
             <div className="my-5 flex items-center gap-3 text-[12px] text-[#7a7a7a]">
-              <span className="h-px flex-1 bg-[#e0e0e0]" /><span>atau</span><span className="h-px flex-1 bg-[#e0e0e0]" />
+              <span className="h-px flex-1 bg-[#e0e0e0]" /><span>{t('atau')}</span><span className="h-px flex-1 bg-[#e0e0e0]" />
             </div>
             <button
               onClick={handleGoogleLogin}
               className="flex min-h-11 w-full items-center justify-center gap-3 rounded-full border border-[#e0e0e0] bg-white px-5 text-[14px] text-[#1d1d1f] transition-colors hover:bg-[#fafafc] active:scale-[0.98]"
             >
               <FcGoogle aria-hidden="true" className="h-5 w-5" />
-              Masuk dengan Google
+              {t('Masuk dengan Google')}
             </button>
           </section>
         </div>
@@ -1200,6 +1206,7 @@ export default function Home() {
         <div className="relative">
           <button
             type="button"
+            aria-label={t('Menu profil')}
             aria-expanded={isProfileMenuOpen}
             aria-haspopup="menu"
             onClick={() => setIsProfileMenuOpen((open) => !open)}
@@ -1240,7 +1247,7 @@ export default function Home() {
               >
                 <div className="px-3 py-2.5">
                   <p className="truncate text-[15px] font-semibold tracking-[-0.2px]">
-                    {profile?.full_name || user.user_metadata?.full_name || 'Akun Notes'}
+                    {profile?.full_name || user.user_metadata?.full_name || t('Akun Notes')}
                   </p>
                   <p className={`truncate text-[13px] tracking-[-0.12px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
                     {user.email}
@@ -1261,7 +1268,7 @@ export default function Home() {
                   }`}
                 >
                   <HiOutlineLogout aria-hidden="true" className="h-4 w-4" />
-                  <span>Keluar</span>
+                  <span>{t('Keluar')}</span>
                 </button>
               </div>
             </>
@@ -1282,8 +1289,8 @@ export default function Home() {
           {/* Tombol Page List di sebelah kiri */}
           <button
             type="button"
-            aria-label="Buka Daftar Halaman & Menu"
-            title="Daftar Halaman & Menu"
+            aria-label={t('Buka Daftar Halaman & Menu')}
+            title={t('Daftar Halaman & Menu')}
             onClick={handleOpenPageList}
             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 ${
               isDarkMode
@@ -1297,7 +1304,7 @@ export default function Home() {
           {/* Judul Halaman Aktif */}
           <div className="flex items-center gap-2 min-w-0">
             <span className="truncate text-[18px] font-semibold tracking-[-0.374px] sm:text-[21px] sm:tracking-[0.231px]">
-              {activeTab === 'notes' ? 'Catatan Saya' : 'Sampah'}
+              {activeTab === 'notes' ? t('Catatan Saya') : t('Sampah')}
             </span>
 
             {activeTab === 'trash' && (
@@ -1320,22 +1327,13 @@ export default function Home() {
                 : 'text-[#ff3b30] hover:bg-black/5'
             }`}
           >
-            Kosongkan Sampah
+            {t('Kosongkan Sampah')}
           </button>
         )}
       </nav>
 
       {activeTab === 'notes' && !isFormOpen && (
-        <button
-          type="button"
-          onClick={handleNewNoteClick}
-          className={`fixed bottom-[calc(24px+env(safe-area-inset-bottom))] right-[calc(16px+env(safe-area-inset-right))] z-40 inline-flex min-h-14 items-center justify-center gap-2 rounded-full px-6 text-[15px] font-medium text-white shadow-lg transition-all hover:shadow-xl active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0071e3] sm:right-[calc(32px+env(safe-area-inset-right))] ${
-            isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'
-          }`}
-        >
-          <HiOutlinePlus aria-hidden="true" className="h-5 w-5" />
-          <span>New Notes</span>
-        </button>
+        <NewNoteButton isDark={isDarkMode} onClick={handleNewNoteClick} />
       )}
 
       {/* Page List Drawer (Slide-over Sheet dari Kiri ala Apple) */}
@@ -1353,7 +1351,7 @@ export default function Home() {
           {/* Drawer Sheet */}
           <aside
             data-drawer
-            aria-label="Daftar Halaman dan Pengaturan"
+            aria-label={t('Daftar Halaman dan Pengaturan')}
             className={`relative z-10 flex h-full w-[280px] max-w-[82vw] flex-col justify-between border-r shadow-2xl backdrop-blur-2xl transition-all duration-300 overscroll-none ${
               isPageListClosing ? 'animate-drawer-slide-out' : 'animate-drawer-slide-in'
             } ${
@@ -1367,7 +1365,7 @@ export default function Home() {
               <span className="text-[15px] font-semibold tracking-[-0.374px]">Notes</span>
               <button
                 type="button"
-                aria-label="Tutup menu"
+                aria-label={t('Tutup menu')}
                 onClick={() => handleClosePageList()}
                 className={`flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-95 ${
                   isDarkMode ? 'bg-white/10 text-[#f5f5f7] hover:bg-white/15' : 'bg-black/5 text-[#1d1d1f] hover:bg-black/10'
@@ -1382,7 +1380,7 @@ export default function Home() {
               {/* Section 1: Halaman (Catatan Utama & Sampah) */}
               <div>
                 <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#86868b] mb-1">
-                  Halaman
+                  {t('Halaman')}
                 </p>
                 <div className="space-y-1">
                   {/* Catatan Utama */}
@@ -1404,7 +1402,7 @@ export default function Home() {
                   >
                     <div className="flex items-center gap-2.5">
                       <HiOutlineDocumentText aria-hidden="true" className="text-base" />
-                      <span>Catatan Utama</span>
+                      <span>{t('Catatan Utama')}</span>
                     </div>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
@@ -1438,7 +1436,7 @@ export default function Home() {
                   >
                     <div className="flex items-center gap-2.5">
                       <HiOutlineTrash aria-hidden="true" className="text-base" />
-                      <span>Sampah</span>
+                      <span>{t('Sampah')}</span>
                     </div>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
@@ -1458,7 +1456,7 @@ export default function Home() {
               {/* Section 2: Pengaturan Akun */}
               <div>
                 <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#86868b] mb-1">
-                  Akun & Preferensi
+                  {t('Akun & Preferensi')}
                 </p>
                 <div className="space-y-1">
                   <button
@@ -1478,7 +1476,19 @@ export default function Home() {
                     }`}
                   >
                     <HiOutlineCog aria-hidden="true" className="text-base" />
-                    <span>Pengaturan Akun</span>
+                    <span>{t('Pengaturan Akun')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleClosePageList(() => setIsApplicationSettingsOpen(true))}
+                    className={`flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[14px] transition-all active:scale-[0.98] ${
+                      isDarkMode
+                        ? 'text-[#f5f5f7] hover:bg-white/10'
+                        : 'text-[#1d1d1f] hover:bg-black/5'
+                    }`}
+                  >
+                    <HiOutlineCog aria-hidden="true" className="text-base" />
+                    <span>{t('Pengaturan Aplikasi')}</span>
                   </button>
                 </div>
               </div>
@@ -1486,7 +1496,7 @@ export default function Home() {
               {/* Section 3: Paket Premium / Free yang sedang aktif */}
               <div>
                 <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#86868b] mb-1">
-                  Paket Langganan
+                  {t('Paket Langganan')}
                 </p>
                 <div
                   className={`rounded-[12px] border p-2 transition-colors ${
@@ -1497,7 +1507,7 @@ export default function Home() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[12px] font-semibold">
-                      {isPremium ? <><HiStar aria-hidden="true" className="mr-1 inline-block align-middle" />Paket Premium</> : 'Free Plan'}
+                      {isPremium ? <><HiStar aria-hidden="true" className="mr-1 inline-block align-middle" />{t('Paket Premium')}</> : t('Free Plan')}
                     </span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
@@ -1510,13 +1520,13 @@ export default function Home() {
                           : 'bg-black/5 text-[#7a7a7a]'
                       }`}
                     >
-                      {isPremium ? 'Aktif' : 'Standar'}
+                      {isPremium ? t('Aktif') : t('Standar')}
                     </span>
                   </div>
                   <p className="mt-0.5 text-[11px] text-[#7a7a7a] dark:text-[#86868b] leading-tight">
                     {isPremium
-                      ? 'Folder tak terbatas & kolaborasi aktif.'
-                      : 'Maksimal 1 folder.'}
+                      ? t('Folder tak terbatas & kolaborasi aktif.')
+                      : t('Maksimal 1 folder.')}
                   </p>
                   <button
                     type="button"
@@ -1535,7 +1545,7 @@ export default function Home() {
                         : 'bg-[#0066cc] text-white hover:bg-[#0055b3]'
                     }`}
                   >
-                    {isPremium ? 'Detail Langganan' : 'Tingkatkan ke Premium'}
+                    {isPremium ? t('Detail Langganan') : t('Tingkatkan ke Premium')}
                   </button>
                 </div>
               </div>
@@ -1543,7 +1553,7 @@ export default function Home() {
               {/* Section 4: Pengaturan Tema Terang atau Gelap */}
               <div>
                 <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#86868b] mb-1">
-                  Tampilan
+                  {t('Tampilan')}
                 </p>
                 <div
                   className={`flex items-center justify-between rounded-[12px] border px-3 py-1.5 transition-colors ${
@@ -1555,14 +1565,14 @@ export default function Home() {
                   <div className="flex items-center gap-2">
                     <span className="text-base">{isDarkMode ? <HiOutlineMoon aria-hidden="true" /> : <HiOutlineSun aria-hidden="true" />}</span>
                     <span className="text-[12px] font-medium">
-                      {isDarkMode ? 'Mode Gelap' : 'Mode Terang'}
+                      {isDarkMode ? t('Mode Gelap') : t('Mode Terang')}
                     </span>
                   </div>
                   <button
                     type="button"
                     role="switch"
                     aria-checked={isDarkMode}
-                    aria-label="Alihkan tema terang atau gelap"
+                    aria-label={t('Alihkan tema terang atau gelap')}
                     onClick={toggleDarkMode}
                     className={`relative h-5 w-10 shrink-0 rounded-full transition-colors duration-200 active:scale-95 ${
                       isDarkMode ? 'bg-[#0066cc]' : 'bg-[#d2d2d7]'
@@ -1614,7 +1624,7 @@ export default function Home() {
                   <p className={`truncate text-[14px] font-semibold leading-snug tracking-[-0.2px] ${
                     isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
                   }`}>
-                    {profile?.full_name || user.user_metadata?.full_name || 'Akun Notes'}
+                    {profile?.full_name || user.user_metadata?.full_name || t('Akun Notes')}
                   </p>
                   <p className={`truncate text-[12px] leading-tight ${
                     isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'
@@ -1634,21 +1644,21 @@ export default function Home() {
         {premiumMessage && (
           <div role="status" className="mb-5 flex items-center justify-between gap-4 rounded-[11px] border border-[#e0e0e0] bg-white px-4 py-3 text-[14px] text-[#1d1d1f]">
             <span>{premiumMessage}</span>
-            <button aria-label="Tutup pesan" onClick={() => setPremiumMessage('')} className="min-h-11 rounded-full px-3 text-[#0066cc] active:scale-95">Tutup</button>
+            <button aria-label={t('Tutup pesan')} onClick={() => setPremiumMessage('')} className="min-h-11 rounded-full px-3 text-[#0066cc] active:scale-95">{t('Tutup')}</button>
           </div>
         )}
 
         {activeTab === 'notes' && isPremium && (
           <div className="mb-6 flex flex-wrap items-center gap-3">
-            <label className="sr-only" htmlFor="folder-filter">Filter folder</label>
+            <label className="sr-only" htmlFor="folder-filter">{t('Filter folder')}</label>
             <select
               id="folder-filter"
               value={folderFilter}
               onChange={(event) => setFolderFilter(event.target.value)}
               className="h-11 min-w-40 rounded-full border border-[#e0e0e0] bg-white px-4 text-[14px] text-[#1d1d1f] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
             >
-              <option value="all">Semua catatan</option>
-              <option value="">Tanpa folder</option>
+              <option value="all">{t('Semua catatan')}</option>
+              <option value="">{t('Tanpa folder')}</option>
               {folders.map((folder) => <option key={folder.id} value={String(folder.id)}>{folder.name}</option>)}
             </select>
             {isCreatingFolder ? (
@@ -1657,17 +1667,17 @@ export default function Home() {
                   autoFocus
                   required
                   maxLength={80}
-                  aria-label="Nama folder baru"
+                  aria-label={t('Nama folder baru')}
                   value={folderName}
                   onChange={(event) => setFolderName(event.target.value)}
-                  placeholder="Nama folder"
+                  placeholder={t('Nama folder')}
                   className="h-11 w-48 rounded-full border border-[#e0e0e0] bg-white px-4 text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
                 />
-                <button className="min-h-11 rounded-full bg-[#0066cc] px-4 text-[14px] text-white active:scale-95">Buat</button>
-                <button type="button" onClick={() => setIsCreatingFolder(false)} className="min-h-11 rounded-full px-3 text-[14px] text-[#0066cc] active:scale-95">Batal</button>
+                <button className="min-h-11 rounded-full bg-[#0066cc] px-4 text-[14px] text-white active:scale-95">{t('Buat')}</button>
+                <button type="button" onClick={() => setIsCreatingFolder(false)} className="min-h-11 rounded-full px-3 text-[14px] text-[#0066cc] active:scale-95">{t('Batal')}</button>
               </form>
             ) : (
-              <button onClick={() => setIsCreatingFolder(true)} className="min-h-11 rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] active:scale-95"><HiOutlinePlus aria-hidden="true" className="mr-1 inline-block align-middle" />Folder</button>
+              <button onClick={() => setIsCreatingFolder(true)} className="min-h-11 rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] active:scale-95"><HiOutlinePlus aria-hidden="true" className="mr-1 inline-block align-middle" />{t('Folder')}</button>
             )}
           </div>
         )}
@@ -1696,10 +1706,10 @@ export default function Home() {
                     <input
                       ref={noteTitleInputRef}
                       id="note-editor-title"
-                      aria-label="Judul catatan"
+                      aria-label={t('Judul catatan')}
                       autoFocus={editingNoteId === null}
                       type="text"
-                      placeholder={editingNoteId ? 'Tanpa Judul' : 'Buat Catatan Baru'}
+                      placeholder={editingNoteId ? t('Tanpa Judul') : t('Buat Catatan Baru')}
                       value={title}
                       onChange={(event) => {
                         setTitle(event.target.value)
@@ -1708,14 +1718,14 @@ export default function Home() {
                       className="w-full min-w-0 bg-transparent text-[21px] font-semibold leading-[1.2] text-[#1d1d1f] outline-none placeholder:text-[#7a7a7a] focus-visible:ring-2 focus-visible:ring-[#0071e3]"
                     />
                     <p aria-live="polite" className="mt-2 min-h-5 text-[12px] text-[#7a7a7a]">
-                      {saveStatus === 'saving' && 'Menyimpan...'}
-                      {saveStatus === 'saved' && <><HiOutlineCheck aria-hidden="true" className="mr-1 inline-block align-middle" />Autosave complete</>}
-                      {saveStatus === 'error' && 'Gagal menyimpan. Periksa koneksi lalu coba lagi.'}
+                      {saveStatus === 'saving' && t('Menyimpan...')}
+                      {saveStatus === 'saved' && <><HiOutlineCheck aria-hidden="true" className="mr-1 inline-block align-middle" />{t('Autosave complete')}</>}
+                      {saveStatus === 'error' && t('Gagal menyimpan. Periksa koneksi lalu coba lagi.')}
                     </p>
                   </div>
                   <button
                     type="button"
-                    aria-label="Tutup editor"
+                    aria-label={t('Tutup editor')}
                     onClick={closeNoteForm}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] text-[#7a7a7a] transition-colors hover:bg-black/5 active:scale-95"
                   >
@@ -1723,7 +1733,8 @@ export default function Home() {
                   </button>
                 </div>
                 <textarea
-                  placeholder="Tulis isi catatan di sini..."
+                  aria-label={t('Isi catatan')}
+                  placeholder={t('Tulis isi catatan di sini...')}
                   value={content}
                   onChange={(e) => {
                     setContent(e.target.value)
@@ -1733,17 +1744,17 @@ export default function Home() {
                   className="mb-5 min-h-[180px] w-full resize-y bg-transparent text-[17px] leading-[1.47] text-[#1d1d1f] focus:outline-none sm:mb-6 sm:min-h-[240px]"
                 />
                 {(isPremium || notes.find((item) => item.id === editingNoteId)?.user_id !== user.id) && editingNoteId !== null && (
-                  <section className="mb-6 border-t border-[#f0f0f0] pt-5" aria-label="Kolaborator catatan">
+                  <section className="mb-6 border-t border-[#f0f0f0] pt-5" aria-label={t('Kolaborator catatan')}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <h3 className="text-[14px] font-semibold text-[#1d1d1f]">
                           {notes.find((item) => item.id === editingNoteId)?.user_id === user.id
-                            ? 'Akses bersama'
-                            : 'Notes ini adalah shared dari pembuat kolaborasi'}
+                            ? t('Akses bersama')
+                            : t('Notes ini adalah shared dari pembuat kolaborasi')}
                         </h3>
-                        <p className="mt-1 text-[12px] text-[#7a7a7a]">{onlineMembers.length ? `${onlineMembers.length} lainnya sedang membuka catatan` : 'Tidak ada kolaborator lain yang sedang aktif'}</p>
+                        <p className="mt-1 text-[12px] text-[#7a7a7a]">{onlineMembers.length ? t('{count} lainnya sedang membuka catatan', { count: onlineMembers.length }) : t('Tidak ada kolaborator lain yang sedang aktif')}</p>
                       </div>
-                      <div className="flex -space-x-2" aria-label="Pengguna yang mengakses catatan">
+                      <div className="flex -space-x-2" aria-label={t('Pengguna yang mengakses catatan')}>
                         {[...noteMembers, ...onlineMembers]
                           .filter((person, index, people) => people.findIndex((item) => item.user_id === person.user_id) === index)
                           .map((person) => (
@@ -1755,20 +1766,20 @@ export default function Home() {
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {noteMembers.filter((person) => person.user_id !== user.id).map((person) => (
-                        <span key={person.user_id} className="rounded-full bg-[#f5f5f7] px-3 py-1.5 text-[12px] text-[#333333]">{person.full_name || 'Kolaborator'}</span>
+                        <span key={person.user_id} className="rounded-full bg-[#f5f5f7] px-3 py-1.5 text-[12px] text-[#333333]">{person.full_name || t('Kolaborator')}</span>
                       ))}
                     </div>
                     {notes.find((item) => item.id === editingNoteId)?.user_id === user.id && (
                       <div className="mt-4 flex flex-wrap gap-2">
                         <input
                           type="email"
-                          aria-label="Email kolaborator"
-                          placeholder="Email akun Notes"
+                          aria-label={t('Email kolaborator')}
+                          placeholder={t('Email akun Notes')}
                           value={inviteEmail}
                           onChange={(event) => setInviteEmail(event.target.value)}
                           className="h-11 min-w-0 flex-1 rounded-full border border-[#e0e0e0] bg-white px-4 text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
                         />
-                        <button type="button" onClick={inviteCollaborator} className="min-h-11 rounded-full bg-[#0066cc] px-4 text-[14px] text-white active:scale-95">Undang</button>
+                        <button type="button" onClick={inviteCollaborator} className="min-h-11 rounded-full bg-[#0066cc] px-4 text-[14px] text-white active:scale-95">{t('Undang')}</button>
                       </div>
                     )}
                     {sharingMessage && <p aria-live="polite" className="mt-2 text-[12px] text-[#7a7a7a]">{sharingMessage}</p>}
@@ -1776,7 +1787,7 @@ export default function Home() {
                 )}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4 sm:gap-4 sm:pt-5">
                   <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-[12px] text-[#7a7a7a]">Aksen warna</span>
+                    <span className="text-[12px] text-[#7a7a7a]">{t('Aksen warna')}</span>
                     {colorOptions.map((color) => (
                       <button
                         key={color.value}
@@ -1798,7 +1809,7 @@ export default function Home() {
                   </div>
                   {isPremium && (
                     <div className="flex items-center gap-2 text-[12px] text-[#7a7a7a]">
-                      <span>Folder</span>
+                      <span>{t('Folder')}</span>
                       <div className="relative">
                         <button
                           ref={folderPickerButtonRef}
@@ -1814,7 +1825,7 @@ export default function Home() {
                           }}
                           className="flex h-11 max-w-[min(56vw,240px)] min-w-[130px] items-center justify-between gap-4 rounded-full border border-[#e0e0e0] bg-white px-4 text-left text-[14px] text-[#1d1d1f] transition-colors hover:bg-[#fafafc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0071e3]"
                         >
-                          <span className="truncate">{folders.find((folder) => String(folder.id) === selectedFolderId)?.name ?? 'Tanpa folder'}</span>
+                          <span className="truncate">{folders.find((folder) => String(folder.id) === selectedFolderId)?.name ?? t('Tanpa folder')}</span>
                           <span aria-hidden="true" className={`text-[11px] transition-transform ${isFolderMenuOpen ? 'rotate-180' : ''}`}><HiOutlineChevronDown aria-hidden="true" /></span>
                         </button>
                       </div>
@@ -1826,13 +1837,13 @@ export default function Home() {
                       onClick={closeNoteForm}
                       className="min-h-11 rounded-full px-4 text-[14px] text-[#7a7a7a] transition-colors hover:bg-black/5 active:scale-95"
                     >
-                      Tutup
+                      {t('Tutup')}
                     </button>
                     <button
                       type="submit"
                       className="min-h-11 rounded-full bg-[#0066cc] px-[22px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95"
                     >
-                      Simpan
+                      {t('Simpan')}
                     </button>
                   </div>
                 </div>
@@ -1847,8 +1858,8 @@ export default function Home() {
           <div key="notes-tab" className="animate-tab-enter">
             {activeNotes.length === 0 ? (
               <div className="text-center py-20 text-[#7a7a7a]">
-                <p className="text-[21px] font-semibold mb-2">Belum ada catatan</p>
-                <p className="text-[17px]">Klik &quot;New Notes&quot; di kanan bawah untuk mulai menulis.</p>
+                <p className="text-[21px] font-semibold mb-2">{t('Belum ada catatan')}</p>
+                <p className="text-[17px]">{t('Klik "{button}" di kanan bawah untuk mulai menulis.', { button: t('New Notes') })}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
@@ -1859,7 +1870,7 @@ export default function Home() {
                     data-note-card
                     role="button"
                     tabIndex={0}
-                    aria-label={`Buka catatan ${note.title || 'Tanpa Judul'}`}
+                    aria-label={t('Buka catatan {name}', { name: note.title || t('Tanpa Judul') })}
                     onClick={() => handleNoteCardClick(note)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
@@ -1872,11 +1883,11 @@ export default function Home() {
                     <div>
                       <div className="flex items-start justify-between mb-2 gap-2">
                         <h3 className="min-w-0 flex-1 truncate text-[17px] font-semibold text-[#1d1d1f] tracking-[-0.374px]">
-                          {note.title || 'Tanpa Judul'}
+                          {note.title || t('Tanpa Judul')}
                         </h3>
                         {/* Pin Button */}
                         {note.user_id === user.id && <button
-                          aria-label={note.is_pinned ? 'Lepas pin catatan' : 'Pin catatan'}
+                          aria-label={note.is_pinned ? t('Lepas pin catatan') : t('Pin catatan')}
                           onClick={(event) => {
                             event.stopPropagation()
                             togglePin(note)
@@ -1888,19 +1899,19 @@ export default function Home() {
                           } ${pinAnimation?.id === note.id ? (pinAnimation.pinning ? 'animate-pin-on' : 'animate-pin-off') : ''}`}
                         >
                           <span aria-hidden="true" className="mr-1 inline-block">{note.is_pinned ? <BsPinFill aria-hidden="true" /> : <BsPin aria-hidden="true" />}</span>
-                          {note.is_pinned ? 'Pinned' : 'Pin'}
+                          {note.is_pinned ? t('Disematkan') : t('Sematkan')}
                         </button>}
                       </div>
 
                       <p className="text-[17px] text-[#1d1d1f]/80 leading-[1.47] line-clamp-4 mb-6 whitespace-pre-wrap">
-                        {note.content || 'Gak ada isi teks...'}
+                        {note.content || t('Gak ada isi teks...')}
                       </p>
                     </div>
 
                     <div className="flex flex-col gap-2 border-t border-black/5 pt-3 text-[12px] text-[#7a7a7a] sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <div>Dibuat: {formatDate(note.created_at)}</div>
-                        <div>Edit: {formatDate(note.updated_at)}</div>
+                        <div>{t('Dibuat: {date}', { date: formatDate(note.created_at) })}</div>
+                        <div>{t('Edit: {date}', { date: formatDate(note.updated_at) })}</div>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-1 self-end sm:self-auto sm:gap-2">
@@ -1912,23 +1923,23 @@ export default function Home() {
                             }}
                             className="min-h-11 px-2 text-[#0066cc] hover:underline"
                           >
-                            Buang
+                            {t('Buang')}
                           </button>
                         ) : (
                           <div className="flex min-h-11 items-center gap-2 px-2">
-                            <span className="text-[12px] text-[#7a7a7a]">Dibagikan</span>
+                            <span className="text-[12px] text-[#7a7a7a]">{t('Dibagikan')}</span>
                             <div
                               className="flex items-center pl-1"
-                              aria-label={`Dibagikan oleh ${notePeopleById[note.id]?.map((person) => person.full_name || 'pengguna').join(', ') || 'pemilik catatan'}`}
+                              aria-label={t('Dibagikan oleh {name}', { name: notePeopleById[note.id]?.map((person) => person.full_name || t('pengguna')).join(', ') || t('pemilik catatan') })}
                             >
                               {(notePeopleById[note.id] ?? []).slice(0, 4).map((person) => (
                                 <span
                                   key={person.user_id}
-                                  title={person.full_name || 'Pengguna note'}
+                                  title={person.full_name || t('Pengguna note')}
                                   className="-ml-1 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#f5f5f7] text-[10px] text-[#1d1d1f] first:ml-0"
                                 >
                                   {person.avatar_url
-                                    ? <Image src={person.avatar_url} alt={person.full_name || 'Foto profil'} width={28} height={28} unoptimized className="h-full w-full object-cover" />
+                                    ? <Image src={person.avatar_url} alt={person.full_name || t('Foto profil')} width={28} height={28} unoptimized className="h-full w-full object-cover" />
                                     : (person.full_name || '?').slice(0, 1).toUpperCase()}
                                 </span>
                               ))}
@@ -1954,20 +1965,20 @@ export default function Home() {
           <div key="trash-tab" className="animate-tab-enter">
             {ownedTrashedCount > 0 && (
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-[14px] text-[#7a7a7a]">{ownedTrashedCount} catatan milikmu di tong sampah</p>
+                <p className="text-[14px] text-[#7a7a7a]">{t('{count} catatan milikmu di tong sampah', { count: ownedTrashedCount })}</p>
                 <button
                   type="button"
                   onClick={() => setConfirmation({ action: 'deleteAll' })}
                   className="min-h-11 rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] transition-colors hover:bg-[#0066cc]/5 active:scale-95"
                 >
-                  Hapus Semua
+                  {t('Hapus Semua')}
                 </button>
               </div>
             )}
             {trashedNotes.length === 0 ? (
               <div className="text-center py-20 text-[#7a7a7a]">
-                <p className="text-[21px] font-semibold mb-2">Tong sampah kosong</p>
-                <p className="text-[17px]">Tidak ada catatan yang dibuang.</p>
+                <p className="text-[21px] font-semibold mb-2">{t('Tong sampah kosong')}</p>
+                <p className="text-[17px]">{t('Tidak ada catatan yang dibuang.')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
@@ -1980,7 +1991,7 @@ export default function Home() {
                   >
                     <div>
                       <h3 className="text-[17px] font-semibold text-[#1d1d1f] mb-2 line-clamp-1">
-                        {note.title || 'Tanpa Judul'}
+                        {note.title || t('Tanpa Judul')}
                       </h3>
                       <p className="text-[17px] text-[#7a7a7a] line-clamp-3 mb-4">
                         {note.content}
@@ -1988,19 +1999,19 @@ export default function Home() {
                     </div>
 
                     <div className="flex flex-col gap-2 border-t border-[#f0f0f0] pt-3 text-[12px] sm:flex-row sm:items-center sm:justify-between">
-                      <span className="text-[#7a7a7a]">Dibuang</span>
+                      <span className="text-[#7a7a7a]">{t('Dibuang')}</span>
                       <div className="flex flex-wrap gap-x-2 gap-y-1 self-end sm:self-auto sm:gap-3">
                         <button
                           onClick={() => toggleTrash(note)}
                           className="text-[#0066cc] font-normal hover:underline active:scale-95"
                         >
-                          Pulihkan
+                          {t('Pulihkan')}
                         </button>
                         <button
                           onClick={() => setConfirmation({ action: 'delete', note })}
                           className="min-h-11 px-2 font-normal text-[#0066cc] hover:underline active:scale-95"
                         >
-                          Hapus Permanen
+                          {t('Hapus Permanen')}
                         </button>
                       </div>
                     </div>
@@ -2014,7 +2025,7 @@ export default function Home() {
         {isFolderMenuOpen && folderMenuPosition && typeof document !== 'undefined' && createPortal(
           <div
             role="listbox"
-            aria-label="Pilih folder catatan"
+            aria-label={t('Pilih folder catatan')}
             data-folder-listbox
             ref={folderMenuRef}
             style={{
@@ -2025,7 +2036,7 @@ export default function Home() {
             }}
             className="fixed z-[100] max-h-52 overflow-y-auto rounded-[11px] border border-[#e0e0e0] bg-white p-1 text-[#1d1d1f]"
           >
-            {[{ id: '', name: 'Tanpa folder' }, ...folders.map((folder) => ({ id: String(folder.id), name: folder.name }))].map((folder) => (
+            {[{ id: '', name: t('Tanpa folder') }, ...folders.map((folder) => ({ id: String(folder.id), name: folder.name }))].map((folder) => (
               <button
                 key={folder.id || 'no-folder'}
                 type="button"
@@ -2072,19 +2083,19 @@ export default function Home() {
                 isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
               }`}>
                 {confirmation.action === 'trash'
-                  ? 'Pindahkan ke Tong Sampah?'
+                  ? t('Pindahkan ke Tong Sampah?')
                   : confirmation.action === 'deleteAll'
-                    ? 'Hapus Semua Catatan Permanen?'
-                    : 'Hapus Catatan Permanen?'}
+                    ? t('Hapus Semua Catatan Permanen?')
+                    : t('Hapus Catatan Permanen?')}
               </h2>
               <p id="confirmation-description" className={`mt-3 text-[17px] leading-[1.47] ${
                 isDarkMode ? 'text-[#86868b]' : 'text-[#1d1d1f]'
               }`}>
                 {confirmation.action === 'trash'
-                  ? `“${confirmation.note?.title || 'Tanpa Judul'}” akan dipindahkan ke tong sampah. Kamu masih bisa memulihkannya nanti.`
+                  ? t('“{name}” akan dipindahkan ke tong sampah. Kamu masih bisa memulihkannya nanti.', { name: confirmation.note?.title || t('Tanpa Judul') })
                   : confirmation.action === 'deleteAll'
-                    ? `${ownedTrashedCount} catatan milikmu di tong sampah akan dihapus permanen dan tidak dapat dipulihkan.`
-                    : `“${confirmation.note?.title || 'Tanpa Judul'}” akan dihapus selamanya dan tidak dapat dipulihkan.`}
+                    ? t('{count} catatan milikmu di tong sampah akan dihapus permanen dan tidak dapat dipulihkan.', { count: ownedTrashedCount })
+                    : t('“{name}” akan dihapus selamanya dan tidak dapat dipulihkan.', { name: confirmation.note?.title || t('Tanpa Judul') })}
               </p>
               <div className="mt-6 flex flex-wrap justify-end gap-2 sm:mt-7 sm:gap-3">
                 <button
@@ -2095,7 +2106,7 @@ export default function Home() {
                     isDarkMode ? 'text-[#2997ff] hover:bg-white/10' : 'text-[#0066cc] hover:bg-[#f5f5f7]'
                   }`}
                 >
-                  Batal
+                  {t('Batal')}
                 </button>
                 <button
                   type="button"
@@ -2105,14 +2116,22 @@ export default function Home() {
                   }`}
                 >
                   {confirmation.action === 'trash'
-                    ? 'Pindahkan'
+                    ? t('Pindahkan')
                     : confirmation.action === 'deleteAll'
-                      ? 'Hapus Semua'
-                      : 'Hapus Permanen'}
+                      ? t('Hapus Semua')
+                      : t('Hapus Permanen')}
                 </button>
               </div>
             </section>
           </div>,
+          document.body
+        )}
+
+        {isMounted && isApplicationSettingsOpen && createPortal(
+          <ApplicationSettings
+            isDark={isDarkMode}
+            onClose={() => setIsApplicationSettingsOpen(false)}
+          />,
           document.body
         )}
 
@@ -2136,26 +2155,26 @@ export default function Home() {
             >
               <div className="mb-6 flex items-start justify-between gap-4">
                 <div>
-                  <h2 id="account-settings-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Pengaturan Akun</h2>
-                  <p className={`mt-2 text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>Kelola informasi profil dan keamanan akun.</p>
+                  <h2 id="account-settings-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>{t('Pengaturan Akun')}</h2>
+                  <p className={`mt-2 text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>{t('Kelola informasi profil dan keamanan akun.')}</p>
                 </div>
-                <button type="button" aria-label="Tutup pengaturan" onClick={() => setIsSettingsOpen(false)} className={`flex h-11 w-11 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}><HiOutlineX aria-hidden="true" /></button>
+                <button type="button" aria-label={t('Tutup pengaturan')} onClick={() => setIsSettingsOpen(false)} className={`flex h-11 w-11 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}><HiOutlineX aria-hidden="true" /></button>
               </div>
 
               <div className="mb-6 flex items-center gap-4">
                 {(profile?.avatar_url || user.user_metadata?.avatar_url) ? (
-                  <Image src={profile?.avatar_url || user.user_metadata.avatar_url} alt="Foto profil" width={64} height={64} unoptimized className="h-16 w-16 rounded-full object-cover" />
+                  <Image src={profile?.avatar_url || user.user_metadata.avatar_url} alt={t('Foto profil')} width={64} height={64} unoptimized className="h-16 w-16 rounded-full object-cover" />
                 ) : (
                   <span className={`flex h-16 w-16 items-center justify-center rounded-full text-[24px] ${isDarkMode ? 'bg-white/10 text-[#f5f5f7]' : 'bg-[#f5f5f7] text-[#1d1d1f]'}`}>{(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}</span>
                 )}
                 <label className={`inline-flex min-h-11 cursor-pointer items-center rounded-full border px-4 text-[14px] active:scale-95 ${isDarkMode ? 'border-[#2997ff] text-[#2997ff]' : 'border-[#0066cc] text-[#0066cc]'}`}>
-                  Ubah Foto
+                  {t('Ubah Foto')}
                   <input type="file" accept="image/*" className="sr-only" onChange={handleAvatarUpload} />
                 </label>
               </div>
 
               <label className={`mb-5 block text-[14px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#333333]'}`}>
-                Nama pengguna
+                {t('Nama pengguna')}
                 <input
                   required
                   maxLength={80}
@@ -2170,10 +2189,10 @@ export default function Home() {
                 />
               </label>
 
-              <p className={`mb-5 text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>Email: {user.email}</p>
+              <p className={`mb-5 text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>{t('Email: {email}', { email: user.email ?? '' })}</p>
               {((user.app_metadata?.providers as string[] | undefined) ?? []).includes('email') ? (
                 <label className={`block text-[14px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#333333]'}`}>
-                  Password baru <span className={isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]' }>(opsional)</span>
+                  {t('Kata sandi baru')} <span className={isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]' }>{t('(opsional)')}</span>
                   <span className={`mt-2 flex h-11 items-center rounded-[8px] border focus-within:ring-2 focus-within:ring-[#0071e3] ${
                     isDarkMode ? 'border-white/15 bg-white/5' : 'border-[#e0e0e0] bg-white'
                   }`}>
@@ -2185,11 +2204,11 @@ export default function Home() {
                       onChange={(event) => setSettingsPassword(event.target.value)}
                       className={`h-full min-w-0 flex-1 bg-transparent px-3 text-[17px] outline-none ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}
                     />
-                    <button type="button" aria-label={showSettingsPassword ? 'Sembunyikan password' : 'Tampilkan password'} onClick={() => setShowSettingsPassword((visible) => !visible)} className={`h-11 rounded-full px-3 text-[12px] active:scale-95 ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>{showSettingsPassword ? 'Sembunyikan' : 'Tampilkan'}</button>
+                    <button type="button" aria-label={showSettingsPassword ? t('Sembunyikan password') : t('Tampilkan password')} onClick={() => setShowSettingsPassword((visible) => !visible)} className={`h-11 rounded-full px-3 text-[12px] active:scale-95 ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>{showSettingsPassword ? t('Sembunyikan') : t('Tampilkan')}</button>
                   </span>
                 </label>
               ) : (
-                <p className={`rounded-[8px] p-3 text-[14px] leading-[1.47] ${isDarkMode ? 'bg-white/5 text-[#86868b]' : 'bg-[#f5f5f7] text-[#7a7a7a]'}`}>Akun ini masuk dengan Google. Penggantian password dikelola melalui akun Google.</p>
+                <p className={`rounded-[8px] p-3 text-[14px] leading-[1.47] ${isDarkMode ? 'bg-white/5 text-[#86868b]' : 'bg-[#f5f5f7] text-[#7a7a7a]'}`}>{t('Akun ini masuk dengan Google. Penggantian password dikelola melalui akun Google.')}</p>
               )}
 
               {settingsMessage && <p aria-live="polite" className={`mt-4 text-[14px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>{settingsMessage}</p>}
@@ -2199,10 +2218,10 @@ export default function Home() {
                 <div className="flex flex-col gap-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
                   <div>
                     <p className={`text-[15px] font-semibold tracking-[-0.2px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>
-                      Keluar dari Akun
+                      {t('Keluar dari Akun')}
                     </p>
                     <p className={`mt-0.5 text-[13px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
-                      Akhiri sesi aktif akun ini pada perangkatmu.
+                      {t('Akhiri sesi aktif akun ini pada perangkatmu.')}
                     </p>
                   </div>
                   <button
@@ -2218,14 +2237,14 @@ export default function Home() {
                     }`}
                   >
                     <HiOutlineLogout aria-hidden="true" className="h-4 w-4" />
-                    <span>Keluar</span>
+                    <span>{t('Keluar')}</span>
                   </button>
                 </div>
               </div>
 
               <div className="mt-6 flex flex-wrap justify-end gap-2 sm:mt-7 sm:gap-3">
-                <button type="button" onClick={() => setIsSettingsOpen(false)} className={`min-h-11 rounded-full px-4 text-[14px] active:scale-95 ${isDarkMode ? 'text-[#2997ff] hover:bg-white/10' : 'text-[#0066cc] hover:bg-[#f5f5f7]'}`}>Batal</button>
-                <button type="submit" disabled={isSettingsSaving} className={`min-h-11 rounded-full px-5 text-[14px] text-white transition-all active:scale-95 disabled:opacity-60 ${isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'}`}>{isSettingsSaving ? 'Menyimpan...' : 'Simpan'}</button>
+                <button type="button" onClick={() => setIsSettingsOpen(false)} className={`min-h-11 rounded-full px-4 text-[14px] active:scale-95 ${isDarkMode ? 'text-[#2997ff] hover:bg-white/10' : 'text-[#0066cc] hover:bg-[#f5f5f7]'}`}>{t('Batal')}</button>
+                <button type="submit" disabled={isSettingsSaving} className={`min-h-11 rounded-full px-5 text-[14px] text-white transition-all active:scale-95 disabled:opacity-60 ${isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'}`}>{isSettingsSaving ? t('Menyimpan...') : t('Simpan')}</button>
               </div>
             </form>
           </div>,
@@ -2249,17 +2268,17 @@ export default function Home() {
             }`}>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>NOTES PREMIUM</p>
-                  <h2 id="premium-offer-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Lebih banyak ruang untuk ide.</h2>
-                  <p className={`mt-2 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>Pilih paket untuk langsung mengaktifkan Premium. Pembayaran belum diproses di aplikasi ini.</p>
+                  <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>{t('NOTES PREMIUM')}</p>
+                  <h2 id="premium-offer-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>{t('Lebih banyak ruang untuk ide.')}</h2>
+                  <p className={`mt-2 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>{t('Pilih paket untuk langsung mengaktifkan Premium. Pembayaran belum diproses di aplikasi ini.')}</p>
                 </div>
-                <button type="button" aria-label="Tutup penawaran Premium" onClick={() => { setIsPremiumOfferOpen(false); setOfferMessage('') }} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}><HiOutlineX aria-hidden="true" /></button>
+                <button type="button" aria-label={t('Tutup penawaran Premium')} onClick={() => { setIsPremiumOfferOpen(false); setOfferMessage('') }} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}><HiOutlineX aria-hidden="true" /></button>
               </div>
 
               <ul className={`mt-6 space-y-3 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>
-                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}><HiOutlineCheck aria-hidden="true" /></span><span>Folder untuk mengelompokkan catatan</span></li>
-                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}><HiOutlineCheck aria-hidden="true" /></span><span>Berbagi dan mengedit catatan bersama kolaborator</span></li>
-                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}><HiOutlineCheck aria-hidden="true" /></span><span>Pin catatan tanpa batas</span></li>
+                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}><HiOutlineCheck aria-hidden="true" /></span><span>{t('Folder untuk mengelompokkan catatan')}</span></li>
+                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}><HiOutlineCheck aria-hidden="true" /></span><span>{t('Berbagi dan mengedit catatan bersama kolaborator')}</span></li>
+                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}><HiOutlineCheck aria-hidden="true" /></span><span>{t('Pin catatan tanpa batas')}</span></li>
               </ul>
 
               <div className="mt-6 grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:mt-7">
@@ -2268,23 +2287,23 @@ export default function Home() {
                     ? 'border-white/15 bg-white/5 hover:bg-white/10'
                     : 'border-[#e0e0e0] bg-white hover:bg-[#fafafc]'
                 }`}>
-                  <span className={`block text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>1 bulan</span>
-                  <span className={`mt-1 block text-[21px] font-semibold tracking-[-0.2px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Rp10.000</span>
+                  <span className={`block text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>{t('1 bulan')}</span>
+                  <span className={`mt-1 block text-[21px] font-semibold tracking-[-0.2px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>{(10000).toLocaleString(locale, { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</span>
                 </button>
                 <button type="button" disabled={isActivatingPremium} onClick={() => activatePremiumPlan(12)} className={`min-h-[84px] rounded-[11px] border px-4 py-3 text-left transition-colors active:scale-[0.98] disabled:opacity-60 ${
                   isDarkMode
                     ? 'border-white/15 bg-white/5 hover:bg-white/10'
                     : 'border-[#e0e0e0] bg-white hover:bg-[#fafafc]'
                 }`}>
-                  <span className={`block text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>1 tahun</span>
-                  <span className={`mt-1 block text-[21px] font-semibold tracking-[-0.2px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Rp90.000</span>
+                  <span className={`block text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>{t('1 tahun')}</span>
+                  <span className={`mt-1 block text-[21px] font-semibold tracking-[-0.2px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>{(90000).toLocaleString(locale, { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</span>
                 </button>
               </div>
 
-              {isActivatingPremium && <p role="status" className={`mt-4 text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>Mengaktifkan Premium...</p>}
+              {isActivatingPremium && <p role="status" className={`mt-4 text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>{t('Mengaktifkan Premium...')}</p>}
               {offerMessage && <p role="status" aria-live="polite" className={`mt-4 rounded-[8px] p-3 text-[14px] leading-[1.47] ${isDarkMode ? 'bg-white/5 text-[#f5f5f7]' : 'bg-[#f5f5f7] text-[#1d1d1f]'}`}>{offerMessage}</p>}
               <div className="mt-6 flex justify-end">
-                <button type="button" onClick={() => { setIsPremiumOfferOpen(false); setOfferMessage('') }} className={`min-h-11 rounded-full px-[22px] text-[14px] text-white transition-all active:scale-95 ${isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'}`}>Tutup</button>
+                <button type="button" onClick={() => { setIsPremiumOfferOpen(false); setOfferMessage('') }} className={`min-h-11 rounded-full px-[22px] text-[14px] text-white transition-all active:scale-95 ${isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'}`}>{t('Tutup')}</button>
               </div>
             </section>
           </div>,
@@ -2305,23 +2324,23 @@ export default function Home() {
             }`}>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}><HiStar aria-hidden="true" className="mr-1 inline-block align-middle" />PREMIUM AKTIF</p>
-                  <h2 id="premium-detail-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Paket Premium</h2>
+                  <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}><HiStar aria-hidden="true" className="mr-1 inline-block align-middle" />{t('PREMIUM AKTIF')}</p>
+                  <h2 id="premium-detail-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>{t('Paket Premium')}</h2>
                 </div>
-                <button type="button" aria-label="Tutup detail paket" onClick={() => setPremiumDetailOpen(false)} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}><HiOutlineX aria-hidden="true" /></button>
+                <button type="button" aria-label={t('Tutup detail paket')} onClick={() => setPremiumDetailOpen(false)} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}><HiOutlineX aria-hidden="true" /></button>
               </div>
               <p className={`mt-4 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>
                 {profile?.premium_expires_at
-                  ? `Masa Premium berakhir pada ${new Date(profile.premium_expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}.`
-                  : 'Tanggal berakhir Premium belum tercatat.'}
+                  ? t('Masa Premium berakhir pada {date}.', { date: new Date(profile.premium_expires_at).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' }) })
+                  : t('Tanggal berakhir Premium belum tercatat.')}
               </p>
               <ul className={`mt-5 space-y-2 text-[14px] leading-[1.47] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
-                <li>Folder catatan</li>
-                <li>Catatan bersama dan kolaborator</li>
-                <li>Pin catatan tanpa batas</li>
+                <li>{t('Folder catatan')}</li>
+                <li>{t('Catatan bersama dan kolaborator')}</li>
+                <li>{t('Pin catatan tanpa batas')}</li>
               </ul>
               <div className="mt-7 flex justify-end">
-                <button type="button" onClick={() => setPremiumDetailOpen(false)} className={`min-h-11 rounded-full px-[22px] text-[14px] text-white transition-all active:scale-95 ${isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'}`}>Tutup</button>
+                <button type="button" onClick={() => setPremiumDetailOpen(false)} className={`min-h-11 rounded-full px-[22px] text-[14px] text-white transition-all active:scale-95 ${isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'}`}>{t('Tutup')}</button>
               </div>
             </section>
           </div>,
@@ -2341,18 +2360,18 @@ export default function Home() {
                 : 'border-[#e0e0e0] bg-white/95 text-[#1d1d1f]'
             }`}>
               <div className={`mb-5 flex h-11 w-11 items-center justify-center rounded-full text-[21px] ${isDarkMode ? 'bg-white/10 text-[#2997ff]' : 'bg-[#f5f5f7] text-[#0066cc]'}`} aria-hidden="true"><HiStar aria-hidden="true" /></div>
-              <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>PREMIUM AKTIF</p>
-              <h2 id="premium-success-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Akunmu sekarang Premium.</h2>
+              <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>{t('PREMIUM AKTIF')}</p>
+              <h2 id="premium-success-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>{t('Akunmu sekarang Premium.')}</h2>
               <p className={`mt-3 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>
-                Premium aktif sampai {new Date(premiumSuccessExpiry).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}. Tidak ada pembayaran yang diproses.
+                {t('Premium aktif sampai {date}. Tidak ada pembayaran yang diproses.', { date: new Date(premiumSuccessExpiry).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' }) })}
               </p>
               <ul className={`mt-5 space-y-2 text-[14px] leading-[1.47] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
-                <li>Folder untuk mengelompokkan catatan</li>
-                <li>Berbagi dan mengedit catatan bersama kolaborator</li>
-                <li>Pin catatan tanpa batas</li>
+                <li>{t('Folder untuk mengelompokkan catatan')}</li>
+                <li>{t('Berbagi dan mengedit catatan bersama kolaborator')}</li>
+                <li>{t('Pin catatan tanpa batas')}</li>
               </ul>
               <div className="mt-7 flex justify-end">
-                <button type="button" onClick={() => setPremiumSuccessExpiry(null)} className={`min-h-11 rounded-full px-[22px] text-[14px] text-white transition-all active:scale-95 ${isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'}`}>Mulai gunakan Premium</button>
+                <button type="button" onClick={() => setPremiumSuccessExpiry(null)} className={`min-h-11 rounded-full px-[22px] text-[14px] text-white transition-all active:scale-95 ${isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'}`}>{t('Mulai gunakan Premium')}</button>
               </div>
             </section>
           </div>,

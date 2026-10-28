@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { HiOutlineDocumentText, HiOutlinePencil, HiOutlineSparkles } from 'react-icons/hi'
+import { useLanguage } from '@/components/LanguageProvider'
 
 interface AppleNoteLoaderProps {
   isDark?: boolean
@@ -17,6 +18,7 @@ export default function AppleNoteLoader({
   fullScreen = true,
 }: AppleNoteLoaderProps) {
   const [detectedDark, setDetectedDark] = useState<boolean | null>(null)
+  const { t } = useLanguage()
 
   useEffect(() => {
     if (isDark !== undefined) return
@@ -84,7 +86,7 @@ export default function AppleNoteLoader({
               activeDark ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
             }`}
           >
-            {title}
+            {t(title)}
           </h2>
           {/* Subtle Apple-style bouncing micro dots */}
           <span className="flex items-center gap-1">
@@ -112,7 +114,7 @@ export default function AppleNoteLoader({
               activeDark ? 'text-[#b3b3b8]' : 'text-[#7a7a7a]'
             }`}
           >
-            {subtitle}
+            {t(subtitle)}
           </p>
         )}
       </div>

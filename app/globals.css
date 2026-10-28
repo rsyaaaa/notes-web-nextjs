@@ -638,7 +638,17 @@ body {
   animation: apple-dot-wave 1.4s ease-in-out 0.4s infinite;
 }
 
+.new-note-button,
+:root[data-theme="dark"] .theme-dark .new-note-button {
+  transition-property: opacity, transform, translate, scale, background-color, border-color, color, box-shadow;
+  transition-duration: 220ms;
+  transition-timing-function: ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .new-note-button {
+    transition: none !important;
+  }
   *,
   *::before,
   *::after {

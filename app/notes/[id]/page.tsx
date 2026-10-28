@@ -11,6 +11,7 @@ import { ImSpinner2 } from 'react-icons/im'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
 import type { Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
 import AppleNoteLoader from '@/components/AppleNoteLoader'
+import { useLanguage } from '@/components/LanguageProvider'
 
 interface ColorOption {
   label: string
@@ -23,30 +24,30 @@ interface ColorOption {
 
 const COLOR_OPTIONS: ColorOption[] = [
   { label: 'Putih', hex: '#ffffff', lightSurface: '#ffffff', darkSurface: '#1d1d1f', lightBorder: '#e0e0e0', darkBorder: '#3a3a3e' },
-  { label: 'Parchment', hex: '#f5f5f7', lightSurface: '#f5f5f7', darkSurface: '#252527', lightBorder: '#e0e0e0', darkBorder: '#3a3a3e' },
+  { label: 'Perkamen', hex: '#f5f5f7', lightSurface: '#f5f5f7', darkSurface: '#252527', lightBorder: '#e0e0e0', darkBorder: '#3a3a3e' },
   { label: 'Kuning', hex: '#fef3c7', lightSurface: '#fefce8', darkSurface: '#2c2514', lightBorder: '#fde68a', darkBorder: '#4a3d1b' },
-  { label: 'Soft Amber', hex: '#fff8e6', lightSurface: '#fffbf0', darkSurface: '#2d2616', lightBorder: '#fde68a', darkBorder: '#4d3f1a' },
+  { label: 'Amber Lembut', hex: '#fff8e6', lightSurface: '#fffbf0', darkSurface: '#2d2616', lightBorder: '#fde68a', darkBorder: '#4d3f1a' },
   { label: 'Mint', hex: '#dcfce7', lightSurface: '#f0fdf4', darkSurface: '#162b21', lightBorder: '#bbf7d0', darkBorder: '#234937' },
-  { label: 'Soft Mint', hex: '#eafaf1', lightSurface: '#f4fbf7', darkSurface: '#162b21', lightBorder: '#bbf7d0', darkBorder: '#234937' },
-  { label: 'Sky', hex: '#e0f2fe', lightSurface: '#f0f9ff', darkSurface: '#162836', lightBorder: '#bae6fd', darkBorder: '#23435c' },
-  { label: 'Soft Blue', hex: '#e8f2ff', lightSurface: '#f2f7ff', darkSurface: '#162838', lightBorder: '#bae6fd', darkBorder: '#23435c' },
-  { label: 'Rose', hex: '#ffe4e6', lightSurface: '#fff1f2', darkSurface: '#2e1a22', lightBorder: '#fecdd3', darkBorder: '#4d2735' },
+  { label: 'Mint Lembut', hex: '#eafaf1', lightSurface: '#f4fbf7', darkSurface: '#162b21', lightBorder: '#bbf7d0', darkBorder: '#234937' },
+  { label: 'Biru Langit', hex: '#e0f2fe', lightSurface: '#f0f9ff', darkSurface: '#162836', lightBorder: '#bae6fd', darkBorder: '#23435c' },
+  { label: 'Biru Lembut', hex: '#e8f2ff', lightSurface: '#f2f7ff', darkSurface: '#162838', lightBorder: '#bae6fd', darkBorder: '#23435c' },
+  { label: 'Merah Muda', hex: '#ffe4e6', lightSurface: '#fff1f2', darkSurface: '#2e1a22', lightBorder: '#fecdd3', darkBorder: '#4d2735' },
   { label: 'Lavender', hex: '#f2edff', lightSurface: '#faf7ff', darkSurface: '#272238', lightBorder: '#ddd6fe', darkBorder: '#433868' },
-  { label: 'Peach', hex: '#fff0e6', lightSurface: '#fff6f0', darkSurface: '#332219', lightBorder: '#fed7aa', darkBorder: '#573928' },
-  { label: 'Teal', hex: '#e6f7f7', lightSurface: '#f2fbfb', darkSurface: '#172c2f', lightBorder: '#bbf0f0', darkBorder: '#26474b' },
-  { label: 'Sage', hex: '#edf4e8', lightSurface: '#f6faf3', darkSurface: '#222c1d', lightBorder: '#cce3be', darkBorder: '#36482e' },
-  { label: 'Silver', hex: '#eceff1', lightSurface: '#f4f6f7', darkSurface: '#242a2e', lightBorder: '#cfd8dc', darkBorder: '#3b454b' },
+  { label: 'Persik', hex: '#fff0e6', lightSurface: '#fff6f0', darkSurface: '#332219', lightBorder: '#fed7aa', darkBorder: '#573928' },
+  { label: 'Hijau Kebiruan', hex: '#e6f7f7', lightSurface: '#f2fbfb', darkSurface: '#172c2f', lightBorder: '#bbf0f0', darkBorder: '#26474b' },
+  { label: 'Hijau Sage', hex: '#edf4e8', lightSurface: '#f6faf3', darkSurface: '#222c1d', lightBorder: '#cce3be', darkBorder: '#36482e' },
+  { label: 'Perak', hex: '#eceff1', lightSurface: '#f4f6f7', darkSurface: '#242a2e', lightBorder: '#cfd8dc', darkBorder: '#3b454b' },
 ]
 
 const PALETTE_SWATCHES = [
   { label: 'Putih', hex: '#ffffff' },
-  { label: 'Parchment', hex: '#f5f5f7' },
+  { label: 'Perkamen', hex: '#f5f5f7' },
   { label: 'Kuning', hex: '#fef3c7' },
   { label: 'Mint', hex: '#dcfce7' },
-  { label: 'Sky', hex: '#e0f2fe' },
-  { label: 'Rose', hex: '#ffe4e6' },
+  { label: 'Biru Langit', hex: '#e0f2fe' },
+  { label: 'Merah Muda', hex: '#ffe4e6' },
   { label: 'Lavender', hex: '#f2edff' },
-  { label: 'Peach', hex: '#fff0e6' },
+  { label: 'Persik', hex: '#fff0e6' },
 ]
 
 const getSurfaceColor = (hex: string, isDark: boolean) => {
@@ -61,6 +62,7 @@ const getSurfaceColor = (hex: string, isDark: boolean) => {
 
 
 function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean }) {
+  const { locale, t } = useLanguage()
   const params = useParams<{ id: string }>()
   const pathname = usePathname()
   const router = useRouter()
@@ -78,7 +80,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [errorMsg, setErrorMsg] = useState<{ source: string; raw?: boolean } | null>(null)
 
   // Theme state
   const [isDarkMode, setIsDarkMode] = useState(false)
@@ -100,7 +102,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   const [ownerPerson, setOwnerPerson] = useState<NotePerson | null>(null)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteLoading, setInviteLoading] = useState(false)
-  const [inviteMsg, setInviteMsg] = useState('')
+  const [inviteMsg, setInviteMsg] = useState<{ source: string; values?: Record<string, string | number>; raw?: boolean; isError?: boolean } | null>(null)
   const [showShareModal, setShowShareModal] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [showFolderPicker, setShowFolderPicker] = useState(false)
@@ -175,7 +177,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         const p = profileMap.get(r.user_id)
         return {
           user_id: r.user_id,
-          full_name: p?.full_name || 'Kolaborator',
+          full_name: p?.full_name || '',
           avatar_url: p?.avatar_url || null,
         }
       })
@@ -201,7 +203,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
     const init = async () => {
       if (!supabaseConfigReady) {
-        setErrorMsg('Konfigurasi Supabase belum siap.')
+        setErrorMsg({ source: 'Konfigurasi Supabase belum siap.' })
         setLoading(false)
         return
       }
@@ -240,7 +242,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         setNoteOwnerId(authUser.id)
         setOwnerPerson({
           user_id: authUser.id,
-          full_name: profileData?.full_name || authUser.user_metadata?.full_name || 'Saya',
+          full_name: profileData?.full_name || authUser.user_metadata?.full_name || '',
           avatar_url: profileData?.avatar_url || authUser.user_metadata?.avatar_url || null,
         })
         setTitle('')
@@ -256,7 +258,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
       if (!noteId || Number.isNaN(noteId)) {
         if (isMounted) {
-          setErrorMsg('Catatan tidak valid.')
+          setErrorMsg({ source: 'Catatan tidak valid.' })
           setLoading(false)
         }
         return
@@ -272,7 +274,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       if (!isMounted) return
 
       if (noteError || !noteData) {
-        setErrorMsg(noteError?.message || 'Catatan tidak ditemukan atau Anda tidak memiliki akses.')
+        setErrorMsg(noteError?.message ? { source: noteError.message, raw: true } : { source: 'Catatan tidak ditemukan atau Anda tidak memiliki akses.' })
         setLoading(false)
         return
       }
@@ -299,7 +301,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       if (fetchedNote.user_id === authUser.id) {
         setOwnerPerson({
           user_id: authUser.id,
-          full_name: profileData?.full_name || authUser.user_metadata?.full_name || 'Saya',
+          full_name: profileData?.full_name || authUser.user_metadata?.full_name || '',
           avatar_url: profileData?.avatar_url || authUser.user_metadata?.avatar_url || null,
         })
       } else {
@@ -311,7 +313,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         if (isMounted && ownerData) {
           setOwnerPerson({
             user_id: ownerData.id,
-            full_name: ownerData.full_name || 'Pemilik Catatan',
+            full_name: ownerData.full_name || '',
             avatar_url: ownerData.avatar_url || null,
           })
         }
@@ -530,12 +532,12 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   // Delete permanently
   const handleDeletePermanently = async () => {
     if (!noteId) return
-    const confirmed = window.confirm('Hapus catatan ini secara permanen?')
+    const confirmed = window.confirm(t('Hapus catatan ini secara permanen?'))
     if (!confirmed) return
 
     const { error } = await supabase.from('notes').delete().eq('id', noteId)
     if (error) {
-      alert(`Gagal menghapus: ${error.message}`)
+      alert(t('Gagal menghapus: {error}', { error: error.message }))
       return
     }
     router.push('/')
@@ -547,7 +549,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
     if (!noteId || !inviteEmail.trim() || !user) return
 
     setInviteLoading(true)
-    setInviteMsg('')
+    setInviteMsg(null)
 
     try {
       const { error } = await supabase.rpc('invite_note_collaborator', {
@@ -556,15 +558,14 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       })
 
       if (error) {
-        setInviteMsg(`Gagal: ${error.message}`)
+        setInviteMsg({ source: 'Gagal: {error}', values: { error: error.message }, isError: true })
       } else {
-        setInviteMsg('Undangan berhasil dikirim!')
+        setInviteMsg({ source: 'Undangan berhasil dikirim!' })
         setInviteEmail('')
         await fetchCollaborators(noteId)
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Terjadi kesalahan'
-      setInviteMsg(message)
+      setInviteMsg(err instanceof Error ? { source: err.message, raw: true, isError: true } : { source: 'Terjadi kesalahan', isError: true })
     } finally {
       setInviteLoading(false)
     }
@@ -573,7 +574,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   // Remove collaborator
   const handleRemoveCollaborator = async (targetUserId: string) => {
     if (!noteId || !isOwner) return
-    const confirmed = window.confirm('Hapus kolaborator ini dari catatan?')
+    const confirmed = window.confirm(t('Hapus kolaborator ini dari catatan?'))
     if (!confirmed) return
 
     try {
@@ -584,14 +585,13 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         .eq('user_id', targetUserId)
 
       if (error) {
-        setInviteMsg(`Gagal: ${error.message}`)
+        setInviteMsg({ source: 'Gagal: {error}', values: { error: error.message }, isError: true })
       } else {
         await fetchCollaborators(noteId)
-        setInviteMsg('Kolaborator berhasil dihapus.')
+        setInviteMsg({ source: 'Kolaborator berhasil dihapus.' })
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Terjadi kesalahan'
-      setInviteMsg(message)
+      setInviteMsg(err instanceof Error ? { source: err.message, raw: true, isError: true } : { source: 'Terjadi kesalahan', isError: true })
     }
   }
 
@@ -631,7 +631,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       if (!saved) {
         setIsSubmitting(false)
         isNavigatingAwayRef.current = false
-        alert('Gagal menyimpan catatan baru. Silakan periksa koneksi dan coba lagi.')
+        alert(t('Gagal menyimpan catatan baru. Silakan periksa koneksi dan coba lagi.'))
         return
       }
     }
@@ -644,10 +644,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   }
 
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return 'Baru saja'
+    if (!dateStr) return t('Baru saja')
     try {
       const d = new Date(dateStr)
-      return d.toLocaleDateString('id-ID', {
+      return d.toLocaleDateString(locale, {
         day: 'numeric',
         month: 'short',
         year: 'numeric',
@@ -664,8 +664,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
     return (
       <AppleNoteLoader
         isDark={isDarkMode}
-        title={isNew ? 'Membuat Catatan...' : 'Membuka Catatan...'}
-        subtitle="Menyiapkan ruang tenang untuk idemu"
+        title={isNew ? t('Membuat Catatan...') : t('Membuka Catatan...')}
+        subtitle={t("Menyiapkan ruang tenang untuk idemu")}
       />
     )
   }
@@ -683,13 +683,13 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           }`}
         >
           <HiOutlineExclamation aria-hidden="true" className="inline-block text-3xl" />
-          <h1 className="mt-3 text-[21px] font-semibold tracking-[-0.28px]">Catatan Tidak Tersedia</h1>
+          <h1 className="mt-3 text-[21px] font-semibold tracking-[-0.28px]">{t("Catatan Tidak Tersedia")}</h1>
           <p
             className={`mt-2 text-[17px] leading-[1.47] tracking-[-0.374px] ${
               isDarkMode ? 'text-[#b3b3b8]' : 'text-[#7a7a7a]'
             }`}
           >
-            {errorMsg}
+            {errorMsg.raw ? errorMsg.source : t(errorMsg.source)}
           </p>
           <button
             type="button"
@@ -698,7 +698,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
               isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
             }`}
           >
-            <HiOutlineChevronLeft aria-hidden="true" className="mr-1 h-5 w-5" /> Kembali ke Catatan
+            <HiOutlineChevronLeft aria-hidden="true" className="mr-1 h-5 w-5" /> {t("Kembali ke Catatan")}
           </button>
         </div>
       </main>
@@ -721,17 +721,17 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           <button
             type="button"
             onClick={handleBackToDashboard}
-            aria-label="Kembali ke beranda"
+            aria-label={t("Kembali ke beranda")}
             className="flex items-center gap-1.5 text-white hover:text-white/80 active:scale-95 transition-transform"
           >
             <FaApple aria-hidden="true" className="text-base" />
-            <span className="font-semibold tracking-normal">Notes</span>
+            <span className="font-semibold tracking-normal">{t("Notes")}</span>
           </button>
         </div>
 
         <div className="flex items-center gap-3">
           <span className="text-[12px] text-[#cccccc]">
-            {isPremium ? <><HiStar aria-hidden="true" className="mr-1 inline-block align-middle" />Premium</> : 'Free Plan'}
+            {isPremium ? <><HiStar aria-hidden="true" className="mr-1 inline-block align-middle" />{t("Premium")}</> : t('Free Plan')}
           </span>
         </div>
       </header>
@@ -756,8 +756,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           }`}
         >
           <HiOutlineChevronLeft aria-hidden="true" className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" />
-          <span className="hidden sm:inline">Catatan Saya</span>
-          <span className="sm:hidden">Catatan</span>
+          <span className="hidden sm:inline">{t("Catatan Saya")}</span>
+          <span className="sm:hidden">{t("Catatan")}</span>
         </button>
 
         {/* Center: Save Status indicator badge */}
@@ -769,23 +769,23 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           {saveStatus === 'saving' && (
             <span className={`flex items-center gap-1.5 ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>
               <ImSpinner2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
-              <span>Menyimpan...</span>
+              <span>{t("Menyimpan...")}</span>
             </span>
           )}
           {saveStatus === 'saved' && (
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-[#34c759]" />
-              <span>Tersimpan</span>
+              <span>{t("Tersimpan")}</span>
             </span>
           )}
           {saveStatus === 'error' && (
             <span className="flex items-center gap-1 text-[#ff453a]">
               <HiOutlineExclamation aria-hidden="true" className="h-3.5 w-3.5" />
-              <span>Gagal simpan</span>
+              <span>{t("Gagal simpan")}</span>
             </span>
           )}
           {saveStatus === 'idle' && (
-            <span>{updatedAt ? `Diedit ${formatDate(updatedAt)}` : 'Catatan Baru'}</span>
+            <span>{updatedAt ? t('Diedit {date}', { date: formatDate(updatedAt) }) : t('Catatan Baru')}</span>
           )}
         </div>
 
@@ -798,8 +798,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
               <button
                 type="button"
                 onClick={handleTogglePin}
-                aria-label={isPinned ? 'Lepas Pin' : 'Pin Catatan'}
-                title={isPinned ? 'Lepas Pin' : 'Pin Catatan'}
+                aria-label={isPinned ? t('Lepas Pin') : t('Pin Catatan')}
+                title={isPinned ? t('Lepas Pin') : t('Pin Catatan')}
                 className={`flex h-[38px] items-center gap-1.5 rounded-full px-3 text-[14px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
                   isPinned
                     ? isDarkMode
@@ -811,7 +811,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                 }`}
               >
                 {isPinned ? <BsPinFill aria-hidden="true" /> : <BsPin aria-hidden="true" />}
-                <span className="text-[12px] font-normal">{isPinned ? 'Dipin' : 'Pin'}</span>
+                <span className="text-[12px] font-normal">{isPinned ? t('Dipin') : t('Sematkan')}</span>
               </button>
             )}
 
@@ -819,8 +819,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             <div className="relative">
               <button
                 type="button"
-                aria-label="Pilih warna catatan"
-                title="Warna Catatan"
+                aria-label={t("Pilih warna catatan")}
+                title={t("Warna Catatan")}
                 onClick={() => {
                   setShowColorPicker(!showColorPicker)
                   setShowFolderPicker(false)
@@ -846,7 +846,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                     <button
                       key={c.hex}
                       type="button"
-                      aria-label={`Warna ${c.label}`}
+                      aria-label={t('Warna {color}', { color: t(c.label) })}
                       onClick={() => {
                         setAccentColor(c.hex)
                         setShowColorPicker(false)
@@ -870,8 +870,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             {!isNew && (isPremium || !isOwner) && (
               <button
                 type="button"
-                aria-label="Kolaborator"
-                title="Kolaborator"
+                aria-label={t("Kolaborator")}
+                title={t("Kolaborator")}
                 onClick={() => {
                   const nextState = !showShareModal
                   setShowShareModal(nextState)
@@ -896,8 +896,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             {!isNew && isOwner && (
               <button
                 type="button"
-                aria-label={isTrashed ? 'Hapus permanen' : 'Buang catatan'}
-                title={isTrashed ? 'Hapus permanen' : 'Buang catatan'}
+                aria-label={isTrashed ? t('Hapus permanen') : t('Buang catatan')}
+                title={isTrashed ? t('Hapus permanen') : t('Buang catatan')}
                 onClick={isTrashed ? handleDeletePermanently : handleToggleTrash}
                 className={`flex h-[38px] w-[38px] items-center justify-center rounded-full border text-[14px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
                   isDarkMode
@@ -924,7 +924,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             {isSubmitting && (
               <ImSpinner2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-white" />
             )}
-            <span>{isSubmitting ? 'Menyimpan...' : 'Selesai'}</span>
+            <span>{isSubmitting ? t('Menyimpan...') : t('Selesai')}</span>
           </button>
         </div>
       </nav>
@@ -940,7 +940,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           }`}
         >
           <div className="flex flex-wrap items-center gap-2">
-            <span>{createdAt ? formatDate(createdAt) : 'Baru saja'}</span>
+            <span>{createdAt ? formatDate(createdAt) : t('Baru saja')}</span>
 
             {/* Folder selection badge */}
             {isPremium && (
@@ -955,7 +955,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                   }`}
                 >
                   <HiOutlineFolder aria-hidden="true" />
-                  <span>{folders.find((f) => String(f.id) === folderId)?.name || 'Tanpa Folder'}</span>
+                  <span>{folders.find((f) => String(f.id) === folderId)?.name || t('Tanpa Folder')}</span>
                   <span className={`text-[10px] ${isDarkMode ? 'text-[#b3b3b8]' : 'text-[#7a7a7a]'}`}><HiOutlineChevronDown aria-hidden="true" /></span>
                 </button>
 
@@ -982,7 +982,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                           : 'text-[#1d1d1f] hover:bg-[#fafafc]'
                       }`}
                     >
-                      Tanpa Folder
+                      {t("Tanpa Folder")}
                     </button>
                     {folders.map((folder) => (
                       <button
@@ -1014,8 +1014,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           </div>
 
           <div className="flex items-center gap-3">
-            <span>{content.trim() ? `${content.trim().split(/\s+/).length} kata` : '0 kata'}</span>
-            <span>{content.length} karakter</span>
+            <span>{t('{count} kata', { count: content.trim() ? content.trim().split(/\s+/).length : 0 })}</span>
+            <span>{t('{count} karakter', { count: content.length })}</span>
           </div>
         </div>
 
@@ -1025,7 +1025,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Judul Catatan"
+          placeholder={t("Judul Catatan")}
           className={`w-full bg-transparent text-[28px] font-semibold tracking-[-0.374px] leading-[1.14] outline-none sm:text-[34px] sm:tracking-[-0.374px] ${
             isDarkMode
               ? 'text-[#f5f5f7] placeholder-[#b3b3b8]/40'
@@ -1039,7 +1039,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           ref={contentTextareaRef}
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder="Tulis catatanmu di sini..."
+          placeholder={t("Tulis catatanmu di sini...")}
           className={`mt-4 w-full flex-1 resize-none bg-transparent pb-36 md:pb-12 text-[17px] font-normal leading-[1.47] tracking-[-0.374px] outline-none ${
             isDarkMode
               ? 'text-[#f5f5f7] placeholder-[#b3b3b8]/40'
@@ -1052,7 +1052,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       {/* 5. Floating Apple Liquid Glass Dock (Mobile View - ala dock liquid glass apple) */}
       <div
         role="toolbar"
-        aria-label="Peralatan Catatan"
+        aria-label={t("Peralatan Catatan")}
         style={{
           bottom: 'max(2.25rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))',
         }}
@@ -1069,8 +1069,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           <button
             type="button"
             onClick={handleTogglePin}
-            aria-label={isPinned ? 'Lepas Pin' : 'Pin Catatan'}
-            title={isPinned ? 'Lepas Pin' : 'Pin Catatan'}
+            aria-label={isPinned ? t('Lepas Pin') : t('Pin Catatan')}
+            title={isPinned ? t('Lepas Pin') : t('Pin Catatan')}
             className={`flex h-[36px] items-center gap-1 rounded-full px-3 text-[13px] transition-transform active:scale-95 ${
               isPinned
                 ? isDarkMode
@@ -1082,7 +1082,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             }`}
           >
             {isPinned ? <BsPinFill aria-hidden="true" /> : <BsPin aria-hidden="true" />}
-            <span className="font-normal">{isPinned ? 'Dipin' : 'Pin'}</span>
+            <span className="font-normal">{isPinned ? t('Dipin') : t('Sematkan')}</span>
           </button>
         )}
 
@@ -1090,8 +1090,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         <div className="relative">
           <button
             type="button"
-            aria-label="Pilih warna catatan"
-            title="Warna Catatan"
+            aria-label={t("Pilih warna catatan")}
+            title={t("Warna Catatan")}
             onClick={() => {
               setShowColorPicker(!showColorPicker)
               setShowFolderPicker(false)
@@ -1119,7 +1119,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                 <button
                   key={c.hex}
                   type="button"
-                  aria-label={`Warna ${c.label}`}
+                  aria-label={t('Warna {color}', { color: t(c.label) })}
                   onClick={() => {
                     setAccentColor(c.hex)
                     setShowColorPicker(false)
@@ -1143,8 +1143,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         {!isNew && (isPremium || !isOwner) && (
           <button
             type="button"
-            aria-label="Kolaborator"
-            title="Kolaborator"
+            aria-label={t("Kolaborator")}
+            title={t("Kolaborator")}
             onClick={() => {
               const nextState = !showShareModal
               setShowShareModal(nextState)
@@ -1175,8 +1175,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         {!isNew && isOwner && (
           <button
             type="button"
-            aria-label={isTrashed ? 'Hapus permanen' : 'Buang catatan'}
-            title={isTrashed ? 'Hapus permanen' : 'Buang catatan'}
+            aria-label={isTrashed ? t('Hapus permanen') : t('Buang catatan')}
+            title={isTrashed ? t('Hapus permanen') : t('Buang catatan')}
             onClick={isTrashed ? handleDeletePermanently : handleToggleTrash}
             className={`flex h-[36px] w-[36px] items-center justify-center rounded-full transition-transform active:scale-95 ${
               isDarkMode
@@ -1226,12 +1226,12 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                   id="collab-modal-title"
                   className="text-[19px] font-semibold tracking-[-0.28px]"
                 >
-                  Kolaborasi Catatan
+                  {t("Kolaborasi Catatan")}
                 </h3>
                 <p className="mt-0.5 text-[13px] text-[#7a7a7a] dark:text-[#b3b3b8] tracking-[-0.12px]">
                   {collaboratorList.length > 0
-                    ? `${collaboratorList.length + (ownerPerson ? 1 : 0)} orang memiliki akses ke catatan ini`
-                    : 'Kelola akses dan kolaborator catatan'}
+                    ? t('{count} orang memiliki akses ke catatan ini', { count: collaboratorList.length + (ownerPerson ? 1 : 0) })
+                    : t('Kelola akses dan kolaborator catatan')}
                 </p>
               </div>
               <button
@@ -1241,7 +1241,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                   isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'
                 }`}
               >
-                Tutup
+                {t("Tutup")}
               </button>
             </div>
 
@@ -1251,10 +1251,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
               <div>
                 <div className="flex items-center justify-between mb-2.5 px-0.5">
                   <span className="text-[12px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#b3b3b8]">
-                    Orang dengan Akses
+                    {t("Orang dengan Akses")}
                   </span>
                   <span className="text-[12px] text-[#7a7a7a] dark:text-[#b3b3b8]">
-                    {collaboratorList.length + (ownerPerson ? 1 : 0)} Anggota
+                    {t('{count} Anggota', { count: collaboratorList.length + (ownerPerson ? 1 : 0) })}
                   </span>
                 </div>
 
@@ -1274,7 +1274,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                           {ownerPerson.avatar_url ? (
                             <Image
                               src={ownerPerson.avatar_url}
-                              alt={ownerPerson.full_name}
+                              alt={ownerPerson.full_name || t(ownerPerson.user_id === user?.id ? 'Saya' : 'Pemilik Catatan')}
                               width={40}
                               height={40}
                               className="h-10 w-10 rounded-full object-cover border border-black/5 dark:border-white/10"
@@ -1282,7 +1282,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                             />
                           ) : (
                             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0066cc] text-[15px] font-semibold text-white shadow-sm">
-                              {(ownerPerson.full_name || 'U').slice(0, 1).toUpperCase()}
+                              {(ownerPerson.full_name || t(ownerPerson.user_id === user?.id ? 'Saya' : 'Pemilik Catatan')).slice(0, 1).toUpperCase()}
                             </div>
                           )}
                           <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#34c759] text-[9px] text-white ring-2 ring-white dark:ring-[#1d1d1f]">
@@ -1291,15 +1291,15 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[15px] font-semibold tracking-[-0.2px]">
-                            {ownerPerson.full_name}
+                            {ownerPerson.full_name || t(ownerPerson.user_id === user?.id ? 'Saya' : 'Pemilik Catatan')}
                             {ownerPerson.user_id === user?.id && (
                               <span className="ml-1.5 text-[13px] font-normal text-[#7a7a7a] dark:text-[#b3b3b8]">
-                                (Anda)
+                                {t("(Anda)")}
                               </span>
                             )}
                           </p>
                           <p className="text-[12px] text-[#7a7a7a] dark:text-[#b3b3b8] tracking-[-0.12px]">
-                            Pemilik Catatan
+                            {t("Pemilik Catatan")}
                           </p>
                         </div>
                       </div>
@@ -1310,7 +1310,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                             : 'bg-black/5 text-[#1d1d1f]'
                         }`}
                       >
-                        Pemilik
+                        {t("Pemilik")}
                       </span>
                     </div>
                   )}
@@ -1327,7 +1327,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                             {m.avatar_url ? (
                               <Image
                                 src={m.avatar_url}
-                                alt={m.full_name}
+                                alt={m.full_name || t('Kolaborator')}
                                 width={40}
                                 height={40}
                                 className="h-10 w-10 rounded-full object-cover border border-black/5 dark:border-white/10"
@@ -1341,21 +1341,21 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                                     : 'bg-[#e8f2ff] text-[#0066cc] border-[#bae6fd]'
                                 }`}
                               >
-                                {(m.full_name || 'K').slice(0, 1).toUpperCase()}
+                                {(m.full_name || t('Kolaborator')).slice(0, 1).toUpperCase()}
                               </div>
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-[15px] font-semibold tracking-[-0.2px]">
-                              {m.full_name}
+                              {m.full_name || t('Kolaborator')}
                               {m.user_id === user?.id && (
                                 <span className="ml-1.5 text-[13px] font-normal text-[#7a7a7a] dark:text-[#b3b3b8]">
-                                  (Anda)
+                                  {t("(Anda)")}
                                 </span>
                               )}
                             </p>
                             <p className="text-[12px] text-[#7a7a7a] dark:text-[#b3b3b8] tracking-[-0.12px]">
-                              Dapat mengedit
+                              {t("Dapat mengedit")}
                             </p>
                           </div>
                         </div>
@@ -1366,7 +1366,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                             onClick={() => handleRemoveCollaborator(m.user_id)}
                             className="shrink-0 text-[13px] text-[#ff453a] hover:underline active:scale-95 px-2 py-1"
                           >
-                            Hapus
+                            {t("Hapus")}
                           </button>
                         )}
                       </div>
@@ -1384,10 +1384,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                   >
                     <HiOutlineUsers aria-hidden="true" className="inline-block text-2xl" />
                     <p className="mt-1.5 text-[14px] font-semibold tracking-[-0.2px]">
-                      Belum ada kolaborator yang diundang
+                      {t("Belum ada kolaborator yang diundang")}
                     </p>
                     <p className="mt-0.5 text-[12px] text-[#7a7a7a] dark:text-[#b3b3b8]">
-                      Undang rekan lewat email di bawah untuk mulai mengedit bersama secara real-time.
+                      {t("Undang rekan lewat email di bawah untuk mulai mengedit bersama secara real-time.")}
                     </p>
                   </div>
                 )}
@@ -1400,7 +1400,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                     htmlFor="invite-collab-input"
                     className="block text-[12px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#b3b3b8] mb-2 px-0.5"
                   >
-                    Undang Kolaborator Baru
+                    {t("Undang Kolaborator Baru")}
                   </label>
 
                   {isPremium ? (
@@ -1415,7 +1415,9 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                           required
                           value={inviteEmail}
                           onChange={(e) => setInviteEmail(e.target.value)}
-                          placeholder="Masukkan email rekan (nama@email.com)"
+                          onInvalid={(e) => e.currentTarget.setCustomValidity(t(e.currentTarget.validity.valueMissing ? 'Email wajib diisi.' : 'Masukkan alamat email yang valid.'))}
+                          onInput={(e) => e.currentTarget.setCustomValidity('')}
+                          placeholder={t("Masukkan email rekan (nama@email.com)")}
                           className={`h-11 w-full rounded-full border pl-11 pr-4 text-[15px] outline-none transition-colors focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
                             isDarkMode
                               ? 'border-[#3a3a3e] bg-[#1d1d1f] text-[#f5f5f7] placeholder-[#b3b3b8]/50'
@@ -1434,10 +1436,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                         {inviteLoading ? (
                           <>
                             <ImSpinner2 aria-hidden="true" className="h-4 w-4 animate-spin" />
-                            <span>Mengirim Undangan...</span>
+                            <span>{t("Mengirim Undangan...")}</span>
                           </>
                         ) : (
-                          <span>Kirim Undangan Kolaborasi</span>
+                          <span>{t("Kirim Undangan Kolaborasi")}</span>
                         )}
                       </button>
                     </form>
@@ -1451,10 +1453,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                     >
                       <HiStar aria-hidden="true" className="inline-block text-xl" />
                       <p className="mt-1 text-[14px] font-semibold">
-                        Fitur Kolaborasi Premium
+                        {t("Fitur Kolaborasi Premium")}
                       </p>
                       <p className="mt-0.5 text-[13px] text-[#7a7a7a] dark:text-[#b3b3b8]">
-                        Tingkatkan akun ke Premium untuk mengundang kolaborator tanpa batas.
+                        {t("Tingkatkan akun ke Premium untuk mengundang kolaborator tanpa batas.")}
                       </p>
                       <button
                         type="button"
@@ -1463,7 +1465,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                           isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
                         }`}
                       >
-                        Lihat Paket Premium
+                        {t("Lihat Paket Premium")}
                       </button>
                     </div>
                   )}
@@ -1471,10 +1473,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                   {inviteMsg && (
                     <p
                       className={`mt-2.5 text-center text-[13px] font-normal ${
-                        inviteMsg.startsWith('Gagal') ? 'text-[#ff453a]' : 'text-[#34c759]'
+                        inviteMsg.isError ? 'text-[#ff453a]' : 'text-[#34c759]'
                       }`}
                     >
-                      {inviteMsg}
+                      {inviteMsg.raw ? inviteMsg.source : t(inviteMsg.source, inviteMsg.values)}
                     </p>
                   )}
                 </div>
@@ -1491,12 +1493,13 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 }
 
 export default function NoteDetailPage({ isNewOverride }: { isNewOverride?: boolean } = {}) {
+  const { t } = useLanguage()
   return (
     <Suspense
       fallback={
         <AppleNoteLoader
-          title={isNewOverride ? 'Membuat Catatan...' : 'Membuka Catatan...'}
-          subtitle="Menyiapkan ruang tenang untuk idemu"
+          title={isNewOverride ? t('Membuat Catatan...') : t('Membuka Catatan...')}
+          subtitle={t("Menyiapkan ruang tenang untuk idemu")}
         />
       }
     >
