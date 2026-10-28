@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
@@ -44,6 +44,7 @@ interface NotePerson {
 
 export default function Home() {
   const router = useRouter()
+  const pathname = usePathname()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(supabaseConfigReady)
   const [notes, setNotes] = useState<Note[]>([])
@@ -288,29 +289,47 @@ export default function Home() {
     setFolderMenuPosition({ top, left, width, maxHeight })
   }
 
+  const fetchProfileRef = useRef(fetchProfile)
+  useEffect(() => {
+    fetchProfileRef.current = fetchProfile
+  }, [fetchProfile])
+
   // 1. Inisialisasi Auth & Auth Listener
   useEffect(() => {
     if (!supabaseConfigReady) return
 
+    let isMounted = true
+
     const initAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        fetchNotes(session.user.id)
-        fetchProfile(session.user)
-        fetchFolders(session.user.id)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!isMounted) return
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          await Promise.allSettled([
+            fetchNotes(session.user.id),
+            fetchProfileRef.current(session.user),
+            fetchFolders(session.user.id),
+          ])
+        }
+      } catch (err) {
+        console.error('Auth initialization error:', err)
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
       }
-      setLoading(false)
     }
 
     initAuth()
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return
       const currentUser = session?.user ?? null
       setUser(currentUser)
       if (currentUser) {
         fetchNotes(currentUser.id)
-        fetchProfile(currentUser)
+        fetchProfileRef.current(currentUser)
         fetchFolders(currentUser.id)
       } else {
         setNotes([])
@@ -323,9 +342,10 @@ export default function Home() {
     })
 
     return () => {
+      isMounted = false
       authListener.subscription.unsubscribe()
     }
-  }, [fetchProfile])
+  }, [])
 
   // Auth Functions
   const handleGoogleLogin = async () => {
@@ -583,6 +603,7 @@ export default function Home() {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       setOpeningNoteId(note.id)
       router.push(`/notes/${note.id}`)
+      window.setTimeout(() => setOpeningNoteId(null), 600)
     } else {
       handleEditClick(note)
     }
@@ -592,17 +613,45 @@ export default function Home() {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       setOpeningNoteId('new')
       router.push('/notes/new')
+      window.setTimeout(() => setOpeningNoteId(null), 600)
     } else {
       if (isFormOpen) closeNoteForm()
       else openNewNote()
     }
   }
 
+  // Clear opening loader whenever route returns to '/'
   useEffect(() => {
-    const handlePageShow = () => setOpeningNoteId(null)
-    window.addEventListener('pageshow', handlePageShow)
-    return () => window.removeEventListener('pageshow', handlePageShow)
+    if (pathname === '/') {
+      setOpeningNoteId(null)
+    }
+  }, [pathname])
+
+  // Clear opening loader on browser back/forward, tab reactivation, or page visibility
+  useEffect(() => {
+    const handleReset = () => setOpeningNoteId(null)
+    window.addEventListener('popstate', handleReset)
+    window.addEventListener('pageshow', handleReset)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        handleReset()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      window.removeEventListener('popstate', handleReset)
+      window.removeEventListener('pageshow', handleReset)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
+
+  // Auto-refresh notes & folders when user navigates back to dashboard '/'
+  useEffect(() => {
+    if (pathname === '/' && user) {
+      fetchNotes(user.id)
+      fetchFolders(user.id)
+    }
+  }, [pathname, user])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setCurrentTime(Date.now()), 0)

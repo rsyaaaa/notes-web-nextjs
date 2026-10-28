@@ -27,14 +27,19 @@ export default function AppleNoteLoader({
       return isDocDark || stored === 'dark' || (!stored && prefersDark)
     }
 
-    setDetectedDark(checkDark())
+    const frame = window.requestAnimationFrame(() => {
+      setDetectedDark(checkDark())
+    })
 
     const observer = new MutationObserver(() => {
       setDetectedDark(checkDark())
     })
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
-    return () => observer.disconnect()
+    return () => {
+      window.cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
   }, [isDark])
 
   const activeDark = isDark !== undefined ? isDark : (detectedDark ?? false)

@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, usePathname, useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
@@ -63,12 +63,20 @@ interface MemberQueryResult {
   } | null
 }
 
-function NoteDetailContent() {
+function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean }) {
   const params = useParams<{ id: string }>()
+  const pathname = usePathname()
   const router = useRouter()
   const noteIdRaw = params?.id
-  const isNew = noteIdRaw === 'new'
-  const noteId = isNew ? null : Number(noteIdRaw)
+  const isNew = Boolean(
+    isNewOverride ||
+    noteIdRaw === 'new' ||
+    pathname === '/notes/new' ||
+    pathname?.endsWith('/notes/new')
+  )
+  const noteId = isNew ? null : (noteIdRaw ? Number(noteIdRaw) : null)
+
+  const isNavigatingAwayRef = useRef(false)
 
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -340,7 +348,9 @@ function NoteDetailContent() {
 
           setSaveStatus('saved')
           lastSavedRef.current = draftToSave
-          router.replace(`/notes/${data.id}`)
+          if (isNew && !isNavigatingAwayRef.current) {
+            router.replace(`/notes/${data.id}`)
+          }
         } else if (noteId) {
           const { error } = await supabase
             .from('notes')
@@ -465,14 +475,23 @@ function NoteDetailContent() {
   }
 
   const handleBackToDashboard = async () => {
+    isNavigatingAwayRef.current = true
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+    }
+
     const hasUnsaved =
       title !== lastSavedRef.current.title ||
       content !== lastSavedRef.current.content ||
       accentColor !== lastSavedRef.current.accentColor ||
       folderId !== lastSavedRef.current.folderId
 
-    if (hasUnsaved) {
-      await saveNote()
+    if (hasUnsaved && (!isNew || title.trim() || content.trim())) {
+      try {
+        await saveNote()
+      } catch (err) {
+        console.error('Failed to save before leaving:', err)
+      }
     }
     router.push('/')
   }
@@ -1112,17 +1131,17 @@ function NoteDetailContent() {
   )
 }
 
-export default function NoteDetailPage() {
+export default function NoteDetailPage({ isNewOverride }: { isNewOverride?: boolean } = {}) {
   return (
     <Suspense
       fallback={
         <AppleNoteLoader
-          title="Membuka Catatan..."
+          title={isNewOverride ? 'Membuat Catatan...' : 'Membuka Catatan...'}
           subtitle="Menyiapkan ruang tenang untuk idemu"
         />
       }
     >
-      <NoteDetailContent />
+      <NoteDetailContent isNewOverride={isNewOverride} />
     </Suspense>
   )
 }
