@@ -89,7 +89,7 @@ body {
   }
 
   [data-dashboard-main] {
-    padding: 10px 10px calc(16px + env(safe-area-inset-bottom)) !important;
+    padding: 10px 10px calc(112px + env(safe-area-inset-bottom)) !important;
   }
 
   [data-dashboard-main] > .mb-6:has(> select#folder-filter) {

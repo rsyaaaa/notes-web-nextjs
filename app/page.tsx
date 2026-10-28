@@ -1310,35 +1310,33 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Tombol Aksi di Kanan */}
-        {activeTab === 'notes' ? (
+        {activeTab === 'trash' && trashedNotes.length > 0 && (
           <button
             type="button"
-            onClick={handleNewNoteClick}
-            className={`flex min-h-[36px] shrink-0 items-center gap-1 rounded-full px-3.5 text-[13px] font-normal text-white transition-all active:scale-95 sm:px-4 sm:text-[14px] ${
-              isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'
+            onClick={() => setConfirmation({ action: 'deleteAll' })}
+            className={`min-h-[36px] shrink-0 rounded-full px-3 text-[12px] sm:text-[13px] font-normal transition-all active:scale-95 ${
+              isDarkMode
+                ? 'text-[#ff453a] hover:bg-white/10'
+                : 'text-[#ff3b30] hover:bg-black/5'
             }`}
           >
-            <HiOutlinePlus aria-hidden="true" className="text-[15px]" />
-            <span className="sm:hidden">{isFormOpen ? 'Tutup' : 'Baru'}</span>
-            <span className="hidden sm:inline">{isFormOpen ? 'Tutup Form' : 'Catatan Baru'}</span>
+            Kosongkan Sampah
           </button>
-        ) : (
-          trashedNotes.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setConfirmation({ action: 'deleteAll' })}
-              className={`min-h-[36px] shrink-0 rounded-full px-3 text-[12px] sm:text-[13px] font-normal transition-all active:scale-95 ${
-                isDarkMode
-                  ? 'text-[#ff453a] hover:bg-white/10'
-                  : 'text-[#ff3b30] hover:bg-black/5'
-              }`}
-            >
-              Kosongkan Sampah
-            </button>
-          )
         )}
       </nav>
+
+      {activeTab === 'notes' && !isFormOpen && (
+        <button
+          type="button"
+          onClick={handleNewNoteClick}
+          className={`fixed bottom-[calc(24px+env(safe-area-inset-bottom))] right-[calc(16px+env(safe-area-inset-right))] z-40 inline-flex min-h-14 items-center justify-center gap-2 rounded-full px-6 text-[15px] font-medium text-white shadow-lg transition-all hover:shadow-xl active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0071e3] sm:right-[calc(32px+env(safe-area-inset-right))] ${
+            isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'
+          }`}
+        >
+          <HiOutlinePlus aria-hidden="true" className="h-5 w-5" />
+          <span>New Notes</span>
+        </button>
+      )}
 
       {/* Page List Drawer (Slide-over Sheet dari Kiri ala Apple) */}
       {isMounted && isPageListOpen && createPortal(
@@ -1632,7 +1630,7 @@ export default function Home() {
       )}
 
       {/* Content Area */}
-      <main data-dashboard-main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 sm:py-8 md:px-12">
+      <main data-dashboard-main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 pb-28 sm:px-6 sm:py-8 sm:pb-28 md:px-12">
         {premiumMessage && (
           <div role="status" className="mb-5 flex items-center justify-between gap-4 rounded-[11px] border border-[#e0e0e0] bg-white px-4 py-3 text-[14px] text-[#1d1d1f]">
             <span>{premiumMessage}</span>
@@ -1682,161 +1680,164 @@ export default function Home() {
               if (event.target === event.currentTarget) closeNoteForm()
             }}
           >
-            <form
-              onSubmit={handleSaveNote}
-              style={{ backgroundColor: getAccentSurface(accentColor) }}
-              data-note-editor
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="note-editor-title"
-              className={`max-h-[90dvh] w-full max-w-[680px] overscroll-contain overflow-y-auto rounded-[18px] border border-[#e0e0e0] p-4 sm:max-h-[min(82vh,760px)] sm:p-8 ${isFormClosing ? 'animate-modal-exit' : 'animate-modal-enter'}`}
-            >
-              <div className="mb-4 flex items-start justify-between gap-3 sm:mb-6 sm:gap-4">
-                <div className="min-w-0 flex-1">
-                  <input
-                    ref={noteTitleInputRef}
-                    id="note-editor-title"
-                    aria-label="Judul catatan"
-                    autoFocus={editingNoteId === null}
-                    type="text"
-                    placeholder={editingNoteId ? 'Tanpa Judul' : 'Buat Catatan Baru'}
-                    value={title}
-                    onChange={(event) => {
-                      setTitle(event.target.value)
-                      setSaveStatus('idle')
-                    }}
-                    className="w-full min-w-0 bg-transparent text-[21px] font-semibold leading-[1.2] text-[#1d1d1f] outline-none placeholder:text-[#7a7a7a] focus-visible:ring-2 focus-visible:ring-[#0071e3]"
-                  />
-                  <p aria-live="polite" className="mt-2 min-h-5 text-[12px] text-[#7a7a7a]">
-                    {saveStatus === 'saving' && 'Menyimpan...'}
-                    {saveStatus === 'saved' && <><HiOutlineCheck aria-hidden="true" className="mr-1 inline-block align-middle" />Autosave complete</>}
-                    {saveStatus === 'error' && 'Gagal menyimpan. Periksa koneksi lalu coba lagi.'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Tutup editor"
-                  onClick={closeNoteForm}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] text-[#7a7a7a] transition-colors hover:bg-black/5 active:scale-95"
-                >
-                  <HiOutlineX aria-hidden="true" />
-                </button>
-              </div>
-              <textarea
-                placeholder="Tulis isi catatan di sini..."
-                value={content}
-                onChange={(e) => {
-                  setContent(e.target.value)
-                  setSaveStatus('idle')
-                }}
-                rows={10}
-                className="mb-5 min-h-[180px] w-full resize-y bg-transparent text-[17px] leading-[1.47] text-[#1d1d1f] focus:outline-none sm:mb-6 sm:min-h-[240px]"
-              />
-              {(isPremium || notes.find((item) => item.id === editingNoteId)?.user_id !== user.id) && editingNoteId !== null && (
-                <section className="mb-6 border-t border-[#f0f0f0] pt-5" aria-label="Kolaborator catatan">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-[14px] font-semibold text-[#1d1d1f]">
-                        {notes.find((item) => item.id === editingNoteId)?.user_id === user.id
-                          ? 'Akses bersama'
-                          : 'Notes ini adalah shared dari pembuat kolaborasi'}
-                      </h3>
-                      <p className="mt-1 text-[12px] text-[#7a7a7a]">{onlineMembers.length ? `${onlineMembers.length} lainnya sedang membuka catatan` : 'Tidak ada kolaborator lain yang sedang aktif'}</p>
-                    </div>
-                    <div className="flex -space-x-2" aria-label="Pengguna yang mengakses catatan">
-                      {[...noteMembers, ...onlineMembers]
-                        .filter((person, index, people) => people.findIndex((item) => item.user_id === person.user_id) === index)
-                        .map((person) => (
-                          <span key={person.user_id} title={person.full_name || person.user_id} className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#f5f5f7] text-[11px] text-[#1d1d1f]">
-                            {person.avatar_url ? <Image src={person.avatar_url} alt="" width={32} height={32} unoptimized className="h-full w-full object-cover" /> : (person.full_name || '?').slice(0, 1).toUpperCase()}
-                          </span>
-                        ))}
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {noteMembers.filter((person) => person.user_id !== user.id).map((person) => (
-                      <span key={person.user_id} className="rounded-full bg-[#f5f5f7] px-3 py-1.5 text-[12px] text-[#333333]">{person.full_name || 'Kolaborator'}</span>
-                    ))}
-                  </div>
-                  {notes.find((item) => item.id === editingNoteId)?.user_id === user.id && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <input
-                        type="email"
-                        aria-label="Email kolaborator"
-                        placeholder="Email akun Notes"
-                        value={inviteEmail}
-                        onChange={(event) => setInviteEmail(event.target.value)}
-                        className="h-11 min-w-0 flex-1 rounded-full border border-[#e0e0e0] bg-white px-4 text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
-                      />
-                      <button type="button" onClick={inviteCollaborator} className="min-h-11 rounded-full bg-[#0066cc] px-4 text-[14px] text-white active:scale-95">Undang</button>
-                    </div>
-                  )}
-                  {sharingMessage && <p aria-live="polite" className="mt-2 text-[12px] text-[#7a7a7a]">{sharingMessage}</p>}
-                </section>
-              )}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4 sm:gap-4 sm:pt-5">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-[12px] text-[#7a7a7a]">Aksen warna</span>
-                  {colorOptions.map((color) => (
-                    <button
-                      key={color.value}
-                      type="button"
-                      aria-label={color.label}
-                      aria-pressed={accentColor === color.value}
-                      onClick={() => {
-                        setAccentColor(color.value)
+            {/* Portals need their own theme scope outside the dashboard DOM tree. */}
+            <div className={`contents ${isDarkMode ? 'theme-dark' : ''}`}>
+              <form
+                onSubmit={handleSaveNote}
+                style={{ backgroundColor: getAccentSurface(accentColor) }}
+                data-note-editor
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="note-editor-title"
+                className={`max-h-[90dvh] w-full max-w-[680px] overscroll-contain overflow-y-auto rounded-[18px] border border-[#e0e0e0] p-4 sm:max-h-[min(82vh,760px)] sm:p-8 ${isFormClosing ? 'animate-modal-exit' : 'animate-modal-enter'}`}
+              >
+                <div className="mb-4 flex items-start justify-between gap-3 sm:mb-6 sm:gap-4">
+                  <div className="min-w-0 flex-1">
+                    <input
+                      ref={noteTitleInputRef}
+                      id="note-editor-title"
+                      aria-label="Judul catatan"
+                      autoFocus={editingNoteId === null}
+                      type="text"
+                      placeholder={editingNoteId ? 'Tanpa Judul' : 'Buat Catatan Baru'}
+                      value={title}
+                      onChange={(event) => {
+                        setTitle(event.target.value)
                         setSaveStatus('idle')
                       }}
-                      style={{ backgroundColor: getAccentSurface(color.value) }}
-                      className={`h-7 w-7 rounded-full border border-black/10 transition-transform active:scale-95 ${
-                        accentColor === color.value
-                          ? `ring-2 ring-[#0066cc] ring-offset-2 ${isDarkMode ? 'ring-offset-[#252527]' : 'ring-offset-white'}`
-                          : ''
-                      }`}
+                      className="w-full min-w-0 bg-transparent text-[21px] font-semibold leading-[1.2] text-[#1d1d1f] outline-none placeholder:text-[#7a7a7a] focus-visible:ring-2 focus-visible:ring-[#0071e3]"
                     />
-                  ))}
-                </div>
-                {isPremium && (
-                  <div className="flex items-center gap-2 text-[12px] text-[#7a7a7a]">
-                    <span>Folder</span>
-                    <div className="relative">
-                      <button
-                        ref={folderPickerButtonRef}
-                        type="button"
-                        aria-haspopup="listbox"
-                        aria-expanded={isFolderMenuOpen}
-                        onClick={() => setIsFolderMenuOpen((open) => !open)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            setIsFolderMenuOpen(true)
-                          }
-                        }}
-                        className="flex h-11 max-w-[min(56vw,240px)] min-w-[130px] items-center justify-between gap-4 rounded-full border border-[#e0e0e0] bg-white px-4 text-left text-[14px] text-[#1d1d1f] transition-colors hover:bg-[#fafafc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0071e3]"
-                      >
-                        <span className="truncate">{folders.find((folder) => String(folder.id) === selectedFolderId)?.name ?? 'Tanpa folder'}</span>
-                        <span aria-hidden="true" className={`text-[11px] transition-transform ${isFolderMenuOpen ? 'rotate-180' : ''}`}><HiOutlineChevronDown aria-hidden="true" /></span>
-                      </button>
-                    </div>
+                    <p aria-live="polite" className="mt-2 min-h-5 text-[12px] text-[#7a7a7a]">
+                      {saveStatus === 'saving' && 'Menyimpan...'}
+                      {saveStatus === 'saved' && <><HiOutlineCheck aria-hidden="true" className="mr-1 inline-block align-middle" />Autosave complete</>}
+                      {saveStatus === 'error' && 'Gagal menyimpan. Periksa koneksi lalu coba lagi.'}
+                    </p>
                   </div>
-                )}
-                <div className="ml-auto flex gap-2">
                   <button
                     type="button"
+                    aria-label="Tutup editor"
                     onClick={closeNoteForm}
-                    className="min-h-11 rounded-full px-4 text-[14px] text-[#7a7a7a] transition-colors hover:bg-black/5 active:scale-95"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] text-[#7a7a7a] transition-colors hover:bg-black/5 active:scale-95"
                   >
-                    Tutup
-                  </button>
-                  <button
-                    type="submit"
-                    className="min-h-11 rounded-full bg-[#0066cc] px-[22px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95"
-                  >
-                    Simpan
+                    <HiOutlineX aria-hidden="true" />
                   </button>
                 </div>
-              </div>
-            </form>
+                <textarea
+                  placeholder="Tulis isi catatan di sini..."
+                  value={content}
+                  onChange={(e) => {
+                    setContent(e.target.value)
+                    setSaveStatus('idle')
+                  }}
+                  rows={10}
+                  className="mb-5 min-h-[180px] w-full resize-y bg-transparent text-[17px] leading-[1.47] text-[#1d1d1f] focus:outline-none sm:mb-6 sm:min-h-[240px]"
+                />
+                {(isPremium || notes.find((item) => item.id === editingNoteId)?.user_id !== user.id) && editingNoteId !== null && (
+                  <section className="mb-6 border-t border-[#f0f0f0] pt-5" aria-label="Kolaborator catatan">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-[14px] font-semibold text-[#1d1d1f]">
+                          {notes.find((item) => item.id === editingNoteId)?.user_id === user.id
+                            ? 'Akses bersama'
+                            : 'Notes ini adalah shared dari pembuat kolaborasi'}
+                        </h3>
+                        <p className="mt-1 text-[12px] text-[#7a7a7a]">{onlineMembers.length ? `${onlineMembers.length} lainnya sedang membuka catatan` : 'Tidak ada kolaborator lain yang sedang aktif'}</p>
+                      </div>
+                      <div className="flex -space-x-2" aria-label="Pengguna yang mengakses catatan">
+                        {[...noteMembers, ...onlineMembers]
+                          .filter((person, index, people) => people.findIndex((item) => item.user_id === person.user_id) === index)
+                          .map((person) => (
+                            <span key={person.user_id} title={person.full_name || person.user_id} className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#f5f5f7] text-[11px] text-[#1d1d1f]">
+                              {person.avatar_url ? <Image src={person.avatar_url} alt="" width={32} height={32} unoptimized className="h-full w-full object-cover" /> : (person.full_name || '?').slice(0, 1).toUpperCase()}
+                            </span>
+                          ))}
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {noteMembers.filter((person) => person.user_id !== user.id).map((person) => (
+                        <span key={person.user_id} className="rounded-full bg-[#f5f5f7] px-3 py-1.5 text-[12px] text-[#333333]">{person.full_name || 'Kolaborator'}</span>
+                      ))}
+                    </div>
+                    {notes.find((item) => item.id === editingNoteId)?.user_id === user.id && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <input
+                          type="email"
+                          aria-label="Email kolaborator"
+                          placeholder="Email akun Notes"
+                          value={inviteEmail}
+                          onChange={(event) => setInviteEmail(event.target.value)}
+                          className="h-11 min-w-0 flex-1 rounded-full border border-[#e0e0e0] bg-white px-4 text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
+                        />
+                        <button type="button" onClick={inviteCollaborator} className="min-h-11 rounded-full bg-[#0066cc] px-4 text-[14px] text-white active:scale-95">Undang</button>
+                      </div>
+                    )}
+                    {sharingMessage && <p aria-live="polite" className="mt-2 text-[12px] text-[#7a7a7a]">{sharingMessage}</p>}
+                  </section>
+                )}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4 sm:gap-4 sm:pt-5">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-[12px] text-[#7a7a7a]">Aksen warna</span>
+                    {colorOptions.map((color) => (
+                      <button
+                        key={color.value}
+                        type="button"
+                        aria-label={color.label}
+                        aria-pressed={accentColor === color.value}
+                        onClick={() => {
+                          setAccentColor(color.value)
+                          setSaveStatus('idle')
+                        }}
+                        style={{ backgroundColor: getAccentSurface(color.value) }}
+                        className={`h-7 w-7 rounded-full border border-black/10 transition-transform active:scale-95 ${
+                          accentColor === color.value
+                            ? `ring-2 ring-[#0066cc] ring-offset-2 ${isDarkMode ? 'ring-offset-[#252527]' : 'ring-offset-white'}`
+                            : ''
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  {isPremium && (
+                    <div className="flex items-center gap-2 text-[12px] text-[#7a7a7a]">
+                      <span>Folder</span>
+                      <div className="relative">
+                        <button
+                          ref={folderPickerButtonRef}
+                          type="button"
+                          aria-haspopup="listbox"
+                          aria-expanded={isFolderMenuOpen}
+                          onClick={() => setIsFolderMenuOpen((open) => !open)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              setIsFolderMenuOpen(true)
+                            }
+                          }}
+                          className="flex h-11 max-w-[min(56vw,240px)] min-w-[130px] items-center justify-between gap-4 rounded-full border border-[#e0e0e0] bg-white px-4 text-left text-[14px] text-[#1d1d1f] transition-colors hover:bg-[#fafafc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0071e3]"
+                        >
+                          <span className="truncate">{folders.find((folder) => String(folder.id) === selectedFolderId)?.name ?? 'Tanpa folder'}</span>
+                          <span aria-hidden="true" className={`text-[11px] transition-transform ${isFolderMenuOpen ? 'rotate-180' : ''}`}><HiOutlineChevronDown aria-hidden="true" /></span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <div className="ml-auto flex gap-2">
+                    <button
+                      type="button"
+                      onClick={closeNoteForm}
+                      className="min-h-11 rounded-full px-4 text-[14px] text-[#7a7a7a] transition-colors hover:bg-black/5 active:scale-95"
+                    >
+                      Tutup
+                    </button>
+                    <button
+                      type="submit"
+                      className="min-h-11 rounded-full bg-[#0066cc] px-[22px] text-[14px] text-white transition-all hover:bg-[#0071e3] active:scale-95"
+                    >
+                      Simpan
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
           </div>,
           document.body
         )}
@@ -1847,7 +1848,7 @@ export default function Home() {
             {activeNotes.length === 0 ? (
               <div className="text-center py-20 text-[#7a7a7a]">
                 <p className="text-[21px] font-semibold mb-2">Belum ada catatan</p>
-                <p className="text-[17px]">Klik &quot;+ Catatan Baru&quot; di atas untuk mulai menulis.</p>
+                <p className="text-[17px]">Klik &quot;New Notes&quot; di kanan bawah untuk mulai menulis.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
