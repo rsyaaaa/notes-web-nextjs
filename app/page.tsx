@@ -12,6 +12,7 @@ import { BsPin, BsPinFill } from 'react-icons/bs'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
 import AppleNoteLoader from '@/components/AppleNoteLoader'
 import NewNoteButton from '@/components/NewNoteButton'
+import { getNewNoteFolderId, getNewNoteHref } from '@/lib/new-note-folder'
 import { useLanguage } from '@/components/LanguageProvider'
 import ApplicationSettings from '@/components/ApplicationSettings'
 
@@ -617,7 +618,7 @@ export default function Home() {
   const openNewNote = () => {
     setNoteMembers([])
     setOnlineMembers([])
-    const emptyDraft = { title: '', content: '', accentColor: '#ffffff', folderId: '' }
+    const emptyDraft = { title: '', content: '', accentColor: '#ffffff', folderId: getNewNoteFolderId(folderFilter, folders) }
     setEditingNoteId(null)
     setTitle(emptyDraft.title)
     setContent(emptyDraft.content)
@@ -652,7 +653,7 @@ export default function Home() {
   const handleNewNoteClick = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       setOpeningNoteId('new')
-      router.push('/notes/new')
+      router.push(getNewNoteHref(folderFilter, folders))
       window.setTimeout(() => setOpeningNoteId(null), 600)
     } else {
       if (isFormOpen) closeNoteForm()

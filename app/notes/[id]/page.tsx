@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, usePathname, useRouter } from 'next/navigation'
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { FaApple } from 'react-icons/fa'
@@ -12,6 +12,7 @@ import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
 import type { Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
 import AppleNoteLoader from '@/components/AppleNoteLoader'
 import { useLanguage } from '@/components/LanguageProvider'
+import { getNewNoteFolderId } from '@/lib/new-note-folder'
 
 interface ColorOption {
   label: string
@@ -65,6 +66,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   const { locale, t } = useLanguage()
   const params = useParams<{ id: string }>()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const noteIdRaw = params?.id
   const isNew = Boolean(
@@ -74,6 +76,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
     pathname?.endsWith('/notes/new')
   )
   const noteId = isNew ? null : (noteIdRaw ? Number(noteIdRaw) : null)
+  const requestedFolder = isNew ? searchParams.get('folder') : null
 
   const isNavigatingAwayRef = useRef(false)
 
@@ -248,10 +251,11 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         setTitle('')
         setContent('')
         setAccentColor('#ffffff')
-        setFolderId('')
+        const initialFolderId = getNewNoteFolderId(requestedFolder, folderList ?? [])
+        setFolderId(initialFolderId)
         setIsPinned(false)
         setIsTrashed(false)
-        lastSavedRef.current = { title: '', content: '', accentColor: '#ffffff', folderId: '' }
+        lastSavedRef.current = { title: '', content: '', accentColor: '#ffffff', folderId: initialFolderId }
         setLoading(false)
         return
       }
@@ -330,7 +334,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
     return () => {
       isMounted = false
     }
-  }, [fetchCollaborators, isNew, noteId, router])
+  }, [fetchCollaborators, isNew, noteId, requestedFolder, router])
 
   // Realtime subscription for updates
   useEffect(() => {

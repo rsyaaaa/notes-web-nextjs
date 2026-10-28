@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { FaApple } from 'react-icons/fa'
 import { HiOutlineChevronDown, HiOutlineFolder, HiOutlineSearch, HiPlus, HiStar } from 'react-icons/hi'
 import { supabase } from '@/lib/supabaseClient'
+import { getNewNoteFolderId, getNewNoteHref } from '@/lib/new-note-folder'
 import type { Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
 import { useLanguage } from '@/components/LanguageProvider'
 
@@ -204,14 +205,15 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
   // Handle New Note Click (Mobile -> /notes/new, Desktop -> Open Form)
   const handleNewNoteClick = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      router.push('/notes/new')
+      router.push(getNewNoteHref(folderFilter, folders))
     } else {
       setEditingNoteId(null)
       setTitle('')
       setContent('')
       setAccentColor('#ffffff')
-      setSelectedFolderId('')
-      lastSavedDraft.current = { title: '', content: '', accentColor: '#ffffff', folderId: '' }
+      const initialFolderId = getNewNoteFolderId(folderFilter, folders)
+      setSelectedFolderId(initialFolderId)
+      lastSavedDraft.current = { title: '', content: '', accentColor: '#ffffff', folderId: initialFolderId }
       setIsFormOpen(true)
     }
   }
