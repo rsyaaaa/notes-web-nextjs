@@ -103,6 +103,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const lastSavedRef = useRef<NoteDraft>({ title: '', content: '', accentColor: '#ffffff', folderId: '' })
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -365,8 +366,22 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
   // Save changes to Supabase
   const saveNote = useCallback(
-    async (forceValues?: Partial<NoteDraft & { is_pinned?: boolean; is_trashed?: boolean }>) => {
-      if (!user) return
+    async (forceValues?: Partial<NoteDraft & { is_pinned?: boolean; is_trashed?: boolean }>): Promise<boolean> => {
+      let currentUser = user
+      if (!currentUser) {
+        const { data: sessionData } = await supabase.auth.getSession()
+        currentUser = sessionData?.session?.user ?? null
+        if (!currentUser) {
+          const { data: authData } = await supabase.auth.getUser()
+          currentUser = authData?.user ?? null
+        }
+      }
+
+      if (!currentUser) {
+        console.error('Save failed: User is not authenticated')
+        setSaveStatus('error')
+        return false
+      }
 
       const draftToSave: NoteDraft = {
         title: forceValues?.title !== undefined ? forceValues.title : title,
@@ -375,16 +390,22 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         folderId: forceValues?.folderId !== undefined ? forceValues.folderId : folderId,
       }
 
-      if (isNew && !draftToSave.title.trim() && !draftToSave.content.trim()) {
-        return
+      const trimmedTitle = draftToSave.title.trim()
+      const trimmedContent = draftToSave.content.trim()
+
+      if (isNew && !trimmedTitle && !trimmedContent) {
+        return true
       }
 
       setSaveStatus('saving')
 
+      // Ensure title has a friendly fallback if user only filled in body content
+      const finalTitle = trimmedTitle || (trimmedContent ? trimmedContent.slice(0, 40) : 'Tanpa Judul')
+
       const payload: Record<string, unknown> = {
-        title: draftToSave.title.trim(),
+        title: finalTitle,
         content: draftToSave.content,
-        accent_color: draftToSave.accentColor,
+        accent_color: draftToSave.accentColor || '#ffffff',
         folder_id: draftToSave.folderId ? Number(draftToSave.folderId) : null,
         updated_at: new Date().toISOString(),
       }
@@ -398,27 +419,39 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
       try {
         if (isNew) {
-          payload.user_id = user.id
+          payload.user_id = currentUser.id
           payload.is_pinned = false
           payload.is_trashed = false
 
-          const { data, error } = await supabase
+          // Direct insert without .select().single() to avoid RLS RETURNING evaluation constraints
+          const { error } = await supabase
             .from('notes')
             .insert(payload)
-            .select()
-            .single()
 
           if (error) {
             console.error('Failed to create note:', error.message)
             setSaveStatus('error')
-            return
+            return false
           }
 
           setSaveStatus('saved')
           lastSavedRef.current = draftToSave
-          if (isNew && !isNavigatingAwayRef.current) {
-            router.replace(`/notes/${data.id}`)
+
+          if (!isNavigatingAwayRef.current) {
+            // If user stays on the page, query latest note ID to replace URL
+            const { data: latest } = await supabase
+              .from('notes')
+              .select('id')
+              .eq('user_id', currentUser.id)
+              .order('id', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+
+            if (latest?.id) {
+              router.replace(`/notes/${latest.id}`)
+            }
           }
+          return true
         } else if (noteId) {
           const { error } = await supabase
             .from('notes')
@@ -428,16 +461,19 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           if (error) {
             console.error('Failed to update note:', error.message)
             setSaveStatus('error')
-            return
+            return false
           }
 
           setSaveStatus('saved')
           setUpdatedAt(payload.updated_at as string)
           lastSavedRef.current = draftToSave
+          return true
         }
+        return false
       } catch (err: unknown) {
         console.error('Save error:', err)
         setSaveStatus('error')
+        return false
       }
     },
     [accentColor, content, folderId, isNew, noteId, router, title, user]
@@ -569,25 +605,38 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   }, [showShareModal])
 
   const handleBackToDashboard = async () => {
+    if (isSubmitting) return
+    setIsSubmitting(true)
+
     isNavigatingAwayRef.current = true
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current)
     }
 
+    const hasContent = Boolean(title.trim() || content.trim())
     const hasUnsaved =
-      title !== lastSavedRef.current.title ||
-      content !== lastSavedRef.current.content ||
-      accentColor !== lastSavedRef.current.accentColor ||
-      folderId !== lastSavedRef.current.folderId
+      hasContent &&
+      (isNew ||
+        title !== lastSavedRef.current.title ||
+        content !== lastSavedRef.current.content ||
+        accentColor !== lastSavedRef.current.accentColor ||
+        folderId !== lastSavedRef.current.folderId)
 
-    if (hasUnsaved && (!isNew || title.trim() || content.trim())) {
-      try {
-        await saveNote()
-      } catch (err) {
-        console.error('Failed to save before leaving:', err)
+    if (hasUnsaved) {
+      const saved = await saveNote()
+      if (!saved) {
+        setIsSubmitting(false)
+        isNavigatingAwayRef.current = false
+        alert('Gagal menyimpan catatan baru. Silakan periksa koneksi dan coba lagi.')
+        return
       }
     }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('notes-refresh'))
+    }
     router.push('/')
+    router.refresh()
   }
 
   const formatDate = (dateStr?: string) => {
@@ -695,7 +744,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         <button
           type="button"
           onClick={handleBackToDashboard}
+          disabled={isSubmitting}
           className={`group flex min-h-[44px] items-center gap-1 text-[17px] font-normal tracking-[-0.374px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
+            isSubmitting ? 'opacity-60 pointer-events-none' : ''
+          } ${
             isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'
           }`}
         >
@@ -864,11 +916,20 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           <button
             type="button"
             onClick={() => handleBackToDashboard()}
-            className={`flex min-h-[36px] items-center rounded-full px-4 text-[14px] font-normal text-white transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
+            disabled={isSubmitting}
+            className={`flex min-h-[36px] items-center gap-1.5 rounded-full px-4 text-[14px] font-normal text-white transition-all active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
+              isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
+            } ${
               isDarkMode ? 'bg-[#0066cc] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0055b3]'
             }`}
           >
-            Selesai
+            {isSubmitting && (
+              <svg className="h-3.5 w-3.5 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+            )}
+            <span>{isSubmitting ? 'Menyimpan...' : 'Selesai'}</span>
           </button>
         </div>
       </nav>

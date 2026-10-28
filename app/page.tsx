@@ -690,6 +690,18 @@ export default function Home() {
     }
   }, [pathname, user])
 
+  // Instant refresh when custom notes-refresh event is dispatched
+  useEffect(() => {
+    const handleCustomRefresh = () => {
+      if (user) {
+        fetchNotes(user.id)
+        fetchFolders(user.id)
+      }
+    }
+    window.addEventListener('notes-refresh', handleCustomRefresh)
+    return () => window.removeEventListener('notes-refresh', handleCustomRefresh)
+  }, [user])
+
   useEffect(() => {
     const timeout = window.setTimeout(() => setCurrentTime(Date.now()), 0)
     return () => window.clearTimeout(timeout)
