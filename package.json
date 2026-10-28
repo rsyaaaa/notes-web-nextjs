@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test:language": "node --test tests/language.test.mjs",
-    "test:folders": "node --test tests/new-note-folder.test.mjs"
+    "test:folders": "node --test tests/new-note-folder.test.mjs",
+    "test:motion": "node --test tests/motion.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { getNewNoteFolderId, getNewNoteHref } from '@/lib/new-note-folder'
 import type { Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
 import { useLanguage } from '@/components/LanguageProvider'
+import { useAnimatedPresence } from '@/lib/useAnimatedPresence'
 
 interface DashboardNotesProps {
   user: User
@@ -49,6 +50,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
   const [searchQuery, setSearchQuery] = useState('')
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
+  const profileMenuPresence = useAnimatedPresence(isProfileMenuOpen)
 
   // Folder creation
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
@@ -56,6 +58,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
 
   // Desktop Editor Modal
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const formPresence = useAnimatedPresence(isFormOpen)
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -65,6 +68,26 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
   const lastSavedDraft = useRef<NoteDraft>({ title: '', content: '', accentColor: '#ffffff', folderId: '' })
 
   const isPremium = profile?.plan === 'premium'
+
+  useEffect(() => {
+    if (!formPresence.isPresent) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [formPresence.isPresent])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsFormOpen(false)
+        setIsProfileMenuOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // Initial load & Realtime subscription
   useEffect(() => {
@@ -367,8 +390,13 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
             <HiOutlineChevronDown aria-hidden="true" className="text-[10px] text-white/60" />
           </button>
 
-          {isProfileMenuOpen && (
-            <div className="absolute right-0 top-[40px] z-50 w-56 rounded-[14px] border border-[#e0e0e0] bg-white p-2 text-[#1d1d1f] shadow-none">
+          {profileMenuPresence.isPresent && (
+            <div
+              data-motion-kind="popover"
+              data-motion-state={profileMenuPresence.isExiting ? 'closing' : 'open'}
+              inert={profileMenuPresence.isExiting}
+              className="motion-popover absolute right-0 top-[40px] z-50 w-56 rounded-[14px] border border-[#e0e0e0] bg-white p-2 text-[#1d1d1f] shadow-none"
+            >
               <div className="border-b border-[#f0f0f0] px-3 py-2">
                 <p className="truncate text-[14px] font-semibold">{profile?.full_name || t('Pengguna')}</p>
                 <p className="truncate text-[12px] text-[#7a7a7a]">{user.email}</p>
@@ -448,7 +476,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
       </nav>
 
       {/* 3. Main Dashboard Content Area */}
-      <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 sm:py-8 md:px-12">
+      <main data-motion-content className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 sm:py-8 md:px-12">
         {/* Search & Folder Controls Bar */}
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Apple Search Input Pill */}
@@ -541,6 +569,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                 return (
                   <article
                     key={note.id}
+                    data-note-card
                     role="button"
                     tabIndex={0}
                     onClick={() => handleNoteClick(note)}
@@ -644,6 +673,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
               {trashedNotes.map((note) => (
                 <article
                   key={note.id}
+                  data-note-card
                   className="flex min-w-0 flex-col justify-between rounded-[18px] border border-[#e0e0e0] bg-white p-6"
                 >
                   <div>
@@ -678,18 +708,20 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
       </main>
 
       {/* 4. Desktop Note Editor Modal */}
-      {isFormOpen && (
+      {formPresence.isPresent && (
         <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
+          data-motion-state={formPresence.isExiting ? 'closing' : 'open'}
+          inert={formPresence.isExiting}
+          className="animate-modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsFormOpen(false)
           }}
         >
           <div
+            role="dialog"
+            aria-modal="true"
             style={{ backgroundColor: accentColor }}
-            className="w-full max-w-[680px] rounded-[18px] border border-[#e0e0e0] bg-white p-6 shadow-none"
+            className="animate-modal-enter w-full max-w-[680px] rounded-[18px] border border-[#e0e0e0] bg-white p-6 shadow-none"
           >
             <div className="flex items-center justify-between border-b border-black/5 pb-3">
               <span className="text-[14px] text-[#7a7a7a]">

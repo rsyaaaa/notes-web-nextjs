@@ -15,6 +15,8 @@ import NewNoteButton from '@/components/NewNoteButton'
 import { getNewNoteFolderId, getNewNoteHref } from '@/lib/new-note-folder'
 import { useLanguage } from '@/components/LanguageProvider'
 import ApplicationSettings from '@/components/ApplicationSettings'
+import PageTransition from '@/components/PageTransition'
+import { getMotionDuration, useAnimatedPresence } from '@/lib/useAnimatedPresence'
 
 // Interface Data Catatan sesuai Skema Supabase
 interface Note {
@@ -51,6 +53,14 @@ interface NotePerson {
 }
 
 export default function Home() {
+  return (
+    <PageTransition>
+      <HomeContent />
+    </PageTransition>
+  )
+}
+
+function HomeContent() {
   const router = useRouter()
   const pathname = usePathname()
   const { locale, t } = useLanguage()
@@ -124,8 +134,20 @@ export default function Home() {
   const [confirmation, setConfirmation] = useState<{
     action: 'trash' | 'delete' | 'deleteAll'
     note?: Note
+    count?: number
   } | null>(null)
   const [openingNoteId, setOpeningNoteId] = useState<number | 'new' | null>(null)
+  const isPremium = profile?.plan === 'premium'
+    && Boolean(profile.premium_expires_at)
+    && new Date(profile.premium_expires_at as string).getTime() > currentTime
+  const accountSettingsPresence = useAnimatedPresence(isSettingsOpen)
+  const applicationSettingsPresence = useAnimatedPresence(isApplicationSettingsOpen)
+  const premiumOfferPresence = useAnimatedPresence(isPremiumOfferOpen)
+  const premiumDetailPresence = useAnimatedPresence(premiumDetailOpen && isPremium)
+  const premiumSuccessPresence = useAnimatedPresence(premiumSuccessExpiry)
+  const confirmationPresence = useAnimatedPresence(confirmation)
+  const profileMenuPresence = useAnimatedPresence(isProfileMenuOpen)
+  const folderMenuPresence = useAnimatedPresence(isFolderMenuOpen)
 
   useEffect(() => {
     const storedTheme = window.localStorage.getItem('notes-theme')
@@ -147,11 +169,11 @@ export default function Home() {
       setIsPageListOpen(false)
       setIsPageListClosing(false)
       if (callback) callback()
-    }, 220)
+    }, getMotionDuration(220))
   }, [isPageListClosing])
 
   useEffect(() => {
-    if (isPageListOpen || isSettingsOpen || isApplicationSettingsOpen || premiumDetailOpen || isPremiumOfferOpen || isFormOpen || confirmation || premiumSuccessExpiry) {
+    if (isPageListOpen || accountSettingsPresence.isPresent || applicationSettingsPresence.isPresent || premiumDetailPresence.isPresent || premiumOfferPresence.isPresent || isFormOpen || confirmationPresence.isPresent || premiumSuccessPresence.isPresent) {
       const originalOverflow = document.body.style.overflow
       const originalTouchAction = document.body.style.touchAction
       document.body.style.overflow = 'hidden'
@@ -161,7 +183,7 @@ export default function Home() {
         document.body.style.touchAction = originalTouchAction
       }
     }
-  }, [isPageListOpen, isSettingsOpen, isApplicationSettingsOpen, premiumDetailOpen, isPremiumOfferOpen, isFormOpen, confirmation, premiumSuccessExpiry])
+  }, [isPageListOpen, accountSettingsPresence.isPresent, applicationSettingsPresence.isPresent, premiumDetailPresence.isPresent, premiumOfferPresence.isPresent, isFormOpen, confirmationPresence.isPresent, premiumSuccessPresence.isPresent])
 
   const toggleDarkMode = () => {
     const nextMode = !isDarkMode
@@ -637,7 +659,7 @@ export default function Home() {
     window.setTimeout(() => {
       setIsFormOpen(false)
       setIsFormClosing(false)
-    }, 180)
+    }, getMotionDuration(180))
   }, [isFormClosing, isFormOpen])
 
   const handleNoteCardClick = (note: Note) => {
@@ -968,7 +990,7 @@ export default function Home() {
   }
 
   const confirmDestructiveAction = async () => {
-    if (!confirmation) return
+    if (!confirmation || confirmationPresence.isExiting) return
     const { action, note } = confirmation
     setConfirmation(null)
     if (action === 'deleteAll') {
@@ -1002,9 +1024,6 @@ export default function Home() {
   const activeNotes = notes.filter((n) => !n.is_trashed && (folderFilter === 'all' || String(n.folder_id ?? '') === folderFilter))
   const trashedNotes = notes.filter((n) => n.is_trashed)
   const ownedTrashedCount = trashedNotes.filter((note) => note.user_id === user?.id).length
-  const isPremium = profile?.plan === 'premium'
-    && Boolean(profile.premium_expires_at)
-    && new Date(profile.premium_expires_at as string).getTime() > currentTime
 
   const openPlanDetails = () => {
     if (isPremium) setPremiumDetailOpen(true)
@@ -1079,7 +1098,7 @@ export default function Home() {
           <span className="font-semibold text-sm"><FaApple aria-hidden="true" className="mr-1 inline-block align-middle" /> Notes</span>
           <span>{t('Catatan pribadimu')}</span>
         </header>
-        <div data-auth-layout className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1120px] items-center justify-center gap-16 px-4 py-8 sm:px-6 sm:py-12 lg:justify-between">
+        <div data-auth-layout data-motion-content className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1120px] items-center justify-center gap-16 px-4 py-8 sm:px-6 sm:py-12 lg:justify-between">
           <section className="hidden max-w-[470px] lg:block">
             <h1 className="text-[56px] font-semibold leading-[1.07] tracking-[-0.374px]">
               {t('Ruang tenang untuk semua idemu.')}
@@ -1231,16 +1250,20 @@ export default function Home() {
           </button>
 
           {/* Profile Menu Popover: Hanya Nama, Email, dan Tombol Logout */}
-          {isProfileMenuOpen && (
+          {profileMenuPresence.isPresent && (
             <>
               <div
                 className="fixed inset-0 z-50 bg-transparent"
+                inert={profileMenuPresence.isExiting}
                 onClick={() => setIsProfileMenuOpen(false)}
                 aria-hidden="true"
               />
               <div
                 role="menu"
-                className={`absolute right-0 top-[calc(100%+8px)] z-[55] w-64 rounded-[14px] border p-2 shadow-2xl backdrop-blur-2xl transition-all ${
+                data-motion-state={profileMenuPresence.isExiting ? 'closing' : 'open'}
+                data-motion-kind="popover"
+                inert={profileMenuPresence.isExiting}
+                className={`motion-popover absolute right-0 top-[calc(100%+8px)] z-[55] w-64 rounded-[14px] border p-2 shadow-2xl backdrop-blur-2xl transition-all ${
                   isDarkMode
                     ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7] shadow-[0_12px_36px_rgba(0,0,0,0.6)]'
                     : 'border-black/5 bg-white/95 text-[#1d1d1f] shadow-[0_12px_36px_rgba(0,0,0,0.15)]'
@@ -1321,7 +1344,7 @@ export default function Home() {
         {activeTab === 'trash' && trashedNotes.length > 0 && (
           <button
             type="button"
-            onClick={() => setConfirmation({ action: 'deleteAll' })}
+            onClick={() => setConfirmation({ action: 'deleteAll', count: ownedTrashedCount })}
             className={`min-h-[36px] shrink-0 rounded-full px-3 text-[12px] sm:text-[13px] font-normal transition-all active:scale-95 ${
               isDarkMode
                 ? 'text-[#ff453a] hover:bg-white/10'
@@ -1339,7 +1362,7 @@ export default function Home() {
 
       {/* Page List Drawer (Slide-over Sheet dari Kiri ala Apple) */}
       {isMounted && isPageListOpen && createPortal(
-        <div className="fixed inset-0 z-[100] flex">
+        <div className="fixed inset-0 z-[100] flex" inert={isPageListClosing}>
           {/* Backdrop Blur */}
           <div
             className={`fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200 ${
@@ -1641,7 +1664,7 @@ export default function Home() {
       )}
 
       {/* Content Area */}
-      <main data-dashboard-main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 pb-28 sm:px-6 sm:py-8 sm:pb-28 md:px-12">
+      <main data-dashboard-main data-motion-content className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 pb-28 sm:px-6 sm:py-8 sm:pb-28 md:px-12">
         {premiumMessage && (
           <div role="status" className="mb-5 flex items-center justify-between gap-4 rounded-[11px] border border-[#e0e0e0] bg-white px-4 py-3 text-[14px] text-[#1d1d1f]">
             <span>{premiumMessage}</span>
@@ -1686,6 +1709,7 @@ export default function Home() {
         {/* Note editor modal */}
         {isMounted && isFormOpen && activeTab === 'notes' && createPortal(
           <div
+            inert={isFormClosing}
             className={`fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-2 backdrop-blur-sm sm:p-4 ${isFormClosing ? 'animate-modal-backdrop-exit' : 'animate-modal-backdrop'}`}
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) closeNoteForm()
@@ -1864,10 +1888,10 @@ export default function Home() {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
-                {activeNotes.map((note) => (
+                {activeNotes.map((note, index) => (
                   <article
                     key={note.id}
-                    style={{ backgroundColor: getAccentSurface(note.accent_color || '#ffffff') }}
+                    style={{ backgroundColor: getAccentSurface(note.accent_color || '#ffffff'), animationDelay: `${Math.min(index, 7) * 30}ms` }}
                     data-note-card
                     role="button"
                     tabIndex={0}
@@ -1969,7 +1993,7 @@ export default function Home() {
                 <p className="text-[14px] text-[#7a7a7a]">{t('{count} catatan milikmu di tong sampah', { count: ownedTrashedCount })}</p>
                 <button
                   type="button"
-                  onClick={() => setConfirmation({ action: 'deleteAll' })}
+                  onClick={() => setConfirmation({ action: 'deleteAll', count: ownedTrashedCount })}
                   className="min-h-11 rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] transition-colors hover:bg-[#0066cc]/5 active:scale-95"
                 >
                   {t('Hapus Semua')}
@@ -1983,10 +2007,10 @@ export default function Home() {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
-                {trashedNotes.map((note) => (
+                {trashedNotes.map((note, index) => (
                   <div
                     key={note.id}
-                    style={{ backgroundColor: getAccentSurface(note.accent_color || '#ffffff') }}
+                    style={{ backgroundColor: getAccentSurface(note.accent_color || '#ffffff'), animationDelay: `${Math.min(index, 7) * 30}ms` }}
                     data-note-card
                     className="flex min-w-0 flex-col justify-between rounded-[18px] border border-[#e0e0e0] bg-[#ffffff] p-5 opacity-80 sm:p-6"
                   >
@@ -2023,11 +2047,14 @@ export default function Home() {
           </div>
         )}
 
-        {isFolderMenuOpen && folderMenuPosition && typeof document !== 'undefined' && createPortal(
+        {folderMenuPresence.isPresent && folderMenuPosition && typeof document !== 'undefined' && createPortal(
           <div
             role="listbox"
             aria-label={t('Pilih folder catatan')}
             data-folder-listbox
+            data-motion-state={folderMenuPresence.isExiting ? 'closing' : 'open'}
+            data-motion-kind="popover"
+            inert={folderMenuPresence.isExiting}
             ref={folderMenuRef}
             style={{
               top: folderMenuPosition.top,
@@ -2035,7 +2062,7 @@ export default function Home() {
               width: folderMenuPosition.width,
               maxHeight: folderMenuPosition.maxHeight,
             }}
-            className="fixed z-[100] max-h-52 overflow-y-auto rounded-[11px] border border-[#e0e0e0] bg-white p-1 text-[#1d1d1f]"
+            className="motion-popover fixed z-[100] max-h-52 overflow-y-auto rounded-[11px] border border-[#e0e0e0] bg-white p-1 text-[#1d1d1f]"
           >
             {[{ id: '', name: t('Tanpa folder') }, ...folders.map((folder) => ({ id: String(folder.id), name: folder.name }))].map((folder) => (
               <button
@@ -2057,8 +2084,10 @@ export default function Home() {
           document.body,
         )}
 
-        {isMounted && confirmation && createPortal(
+        {isMounted && confirmationPresence.isPresent && confirmationPresence.value && createPortal(
           <div
+            data-motion-state={confirmationPresence.isExiting ? 'closing' : 'open'}
+            inert={confirmationPresence.isExiting}
             className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 p-2 backdrop-blur-sm animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setConfirmation(null)
@@ -2078,25 +2107,25 @@ export default function Home() {
               <div className={`mb-5 flex h-11 w-11 items-center justify-center rounded-full text-[21px] font-semibold ${
                 isDarkMode ? 'bg-white/10 text-[#2997ff]' : 'bg-[#f5f5f7] text-[#0066cc]'
               }`} aria-hidden="true">
-                {confirmation.action === 'trash' ? <HiOutlineTrash aria-hidden="true" /> : <HiOutlineX aria-hidden="true" />}
+                {confirmationPresence.value.action === 'trash' ? <HiOutlineTrash aria-hidden="true" /> : <HiOutlineX aria-hidden="true" />}
               </div>
               <h2 id="confirmation-title" className={`text-[21px] font-semibold leading-[1.2] tracking-[-0.2px] ${
                 isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
               }`}>
-                {confirmation.action === 'trash'
+                {confirmationPresence.value.action === 'trash'
                   ? t('Pindahkan ke Tong Sampah?')
-                  : confirmation.action === 'deleteAll'
+                  : confirmationPresence.value.action === 'deleteAll'
                     ? t('Hapus Semua Catatan Permanen?')
                     : t('Hapus Catatan Permanen?')}
               </h2>
               <p id="confirmation-description" className={`mt-3 text-[17px] leading-[1.47] ${
                 isDarkMode ? 'text-[#86868b]' : 'text-[#1d1d1f]'
               }`}>
-                {confirmation.action === 'trash'
-                  ? t('“{name}” akan dipindahkan ke tong sampah. Kamu masih bisa memulihkannya nanti.', { name: confirmation.note?.title || t('Tanpa Judul') })
-                  : confirmation.action === 'deleteAll'
-                    ? t('{count} catatan milikmu di tong sampah akan dihapus permanen dan tidak dapat dipulihkan.', { count: ownedTrashedCount })
-                    : t('“{name}” akan dihapus selamanya dan tidak dapat dipulihkan.', { name: confirmation.note?.title || t('Tanpa Judul') })}
+                {confirmationPresence.value.action === 'trash'
+                  ? t('“{name}” akan dipindahkan ke tong sampah. Kamu masih bisa memulihkannya nanti.', { name: confirmationPresence.value.note?.title || t('Tanpa Judul') })
+                  : confirmationPresence.value.action === 'deleteAll'
+                    ? t('{count} catatan milikmu di tong sampah akan dihapus permanen dan tidak dapat dipulihkan.', { count: confirmationPresence.value.count ?? ownedTrashedCount })
+                    : t('“{name}” akan dihapus selamanya dan tidak dapat dipulihkan.', { name: confirmationPresence.value.note?.title || t('Tanpa Judul') })}
               </p>
               <div className="mt-6 flex flex-wrap justify-end gap-2 sm:mt-7 sm:gap-3">
                 <button
@@ -2112,13 +2141,14 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={confirmDestructiveAction}
+                  disabled={confirmationPresence.isExiting || !confirmation}
                   className={`min-h-11 rounded-full px-[20px] text-[14px] text-white transition-all active:scale-95 ${
                     isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'
                   }`}
                 >
-                  {confirmation.action === 'trash'
+                  {confirmationPresence.value.action === 'trash'
                     ? t('Pindahkan')
-                    : confirmation.action === 'deleteAll'
+                    : confirmationPresence.value.action === 'deleteAll'
                       ? t('Hapus Semua')
                       : t('Hapus Permanen')}
                 </button>
@@ -2128,16 +2158,19 @@ export default function Home() {
           document.body
         )}
 
-        {isMounted && isApplicationSettingsOpen && createPortal(
+        {isMounted && applicationSettingsPresence.isPresent && createPortal(
           <ApplicationSettings
             isDark={isDarkMode}
+            isClosing={applicationSettingsPresence.isExiting}
             onClose={() => setIsApplicationSettingsOpen(false)}
           />,
           document.body
         )}
 
-        {isMounted && isSettingsOpen && createPortal(
+        {isMounted && accountSettingsPresence.isPresent && createPortal(
           <div
+            data-motion-state={accountSettingsPresence.isExiting ? 'closing' : 'open'}
+            inert={accountSettingsPresence.isExiting}
             className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setIsSettingsOpen(false)
@@ -2252,8 +2285,10 @@ export default function Home() {
           document.body
         )}
 
-        {isMounted && isPremiumOfferOpen && createPortal(
+        {isMounted && premiumOfferPresence.isPresent && createPortal(
           <div
+            data-motion-state={premiumOfferPresence.isExiting ? 'closing' : 'open'}
+            inert={premiumOfferPresence.isExiting}
             className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) {
@@ -2311,8 +2346,10 @@ export default function Home() {
           document.body
         )}
 
-        {isMounted && premiumDetailOpen && isPremium && createPortal(
+        {isMounted && premiumDetailPresence.isPresent && createPortal(
           <div
+            data-motion-state={premiumDetailPresence.isExiting ? 'closing' : 'open'}
+            inert={premiumDetailPresence.isExiting}
             className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setPremiumDetailOpen(false)
@@ -2348,8 +2385,10 @@ export default function Home() {
           document.body
         )}
 
-        {isMounted && premiumSuccessExpiry && createPortal(
+        {isMounted && premiumSuccessPresence.isPresent && premiumSuccessPresence.value && createPortal(
           <div
+            data-motion-state={premiumSuccessPresence.isExiting ? 'closing' : 'open'}
+            inert={premiumSuccessPresence.isExiting}
             className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setPremiumSuccessExpiry(null)
@@ -2364,7 +2403,7 @@ export default function Home() {
               <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>{t('PREMIUM AKTIF')}</p>
               <h2 id="premium-success-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>{t('Akunmu sekarang Premium.')}</h2>
               <p className={`mt-3 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>
-                {t('Premium aktif sampai {date}. Tidak ada pembayaran yang diproses.', { date: new Date(premiumSuccessExpiry).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' }) })}
+                {t('Premium aktif sampai {date}. Tidak ada pembayaran yang diproses.', { date: new Date(premiumSuccessPresence.value).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' }) })}
               </p>
               <ul className={`mt-5 space-y-2 text-[14px] leading-[1.47] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
                 <li>{t('Folder untuk mengelompokkan catatan')}</li>

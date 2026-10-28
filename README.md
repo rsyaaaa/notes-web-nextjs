@@ -34,6 +34,18 @@ npm run test:language
 
 These tests use a mocked auth client to check translations, per-account isolation, metadata save requests, save failures, session restoration, and stale async results. Cross-device persistence against a live Supabase project should also be checked with two test accounts.
 
+## Motion
+
+Shared easing and durations live in `app/globals.css`. Route changes use React 19.3 `ViewTransition` through `components/PageTransition.tsx`; unsupported browsers navigate normally, with CSS content reveals as a fallback. The wrapper adds no DOM container that could change fixed/sticky positioning.
+
+Dialogs and popovers use `lib/useAnimatedPresence.ts` to retain closing content for 180ms. Keep `MOTION_EXIT_MS` synchronized with CSS `--motion-exit`. Closing UI is inert; reopening cancels the pending unmount. Reduced-motion preferences disable movement and remove the presence exit delay. Hover lifts are limited to fine-pointer devices.
+
+```bash
+npm run test:motion
+```
+
+The motion tests exercise lifecycle timing using mocked hooks/timers, reduced motion, retained content, rapid reopen, cleanup, and keyboard-focus restoration. Visual timing and native route transitions still need browser/device testing.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

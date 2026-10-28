@@ -7,29 +7,41 @@ import type { Language } from '@/lib/i18n'
 
 interface ApplicationSettingsProps {
   isDark: boolean
+  isClosing?: boolean
   onClose: () => void
 }
 
-export default function ApplicationSettings({ isDark, onClose }: ApplicationSettingsProps) {
+export default function ApplicationSettings({ isDark, isClosing = false, onClose }: ApplicationSettingsProps) {
   const { language, ready, setLanguage, t } = useLanguage()
   const [draft, setDraft] = useState<Language | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [status, setStatus] = useState<'saved' | 'error' | null>(null)
   const dialogRef = useRef<HTMLElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
   const selectedLanguage = draft ?? language
 
   useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     closeRef.current?.focus()
     return () => {
-      if (previousFocus?.isConnected) previousFocus.focus()
+      const previousFocus = previousFocusRef.current
+      previousFocusRef.current = null
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true })
     }
   }, [])
 
+  useEffect(() => {
+    if (!isClosing) return
+    // Restore focus before the inert exit, not after the delayed unmount.
+    const previousFocus = previousFocusRef.current
+    previousFocusRef.current = null
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true })
+  }, [isClosing])
+
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (isSaving || !ready || selectedLanguage === language) return
+    if (isSaving || isClosing || !ready || selectedLanguage === language) return
     setIsSaving(true)
     setStatus(null)
     try {
@@ -45,14 +57,17 @@ export default function ApplicationSettings({ isDark, onClose }: ApplicationSett
 
   return (
     <div
+      data-motion-state={isClosing ? 'closing' : 'open'}
+      inert={isClosing}
+      aria-hidden={isClosing || undefined}
       className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-modal-backdrop"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !isSaving) onClose()
+        if (event.target === event.currentTarget && !isSaving && !isClosing) onClose()
       }}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation()
-          if (!isSaving) onClose()
+          if (!isSaving && !isClosing) onClose()
         }
         if (event.key !== 'Tab') return
         // A radio group has one Tab stop: its checked option, not every radio.
@@ -96,7 +111,7 @@ export default function ApplicationSettings({ isDark, onClose }: ApplicationSett
             type="button"
             aria-label={t('Tutup pengaturan aplikasi')}
             onClick={onClose}
-            disabled={isSaving}
+            disabled={isSaving || isClosing}
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full active:scale-95 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
           >
             <HiOutlineX aria-hidden="true" className="h-5 w-5" />
@@ -104,7 +119,7 @@ export default function ApplicationSettings({ isDark, onClose }: ApplicationSett
         </header>
 
         <form onSubmit={handleSave} className="mt-6">
-          <fieldset disabled={!ready || isSaving}>
+          <fieldset disabled={!ready || isSaving || isClosing}>
             <legend className="mb-3 flex items-center gap-2 text-[14px] font-semibold">
               <HiOutlineTranslate aria-hidden="true" className="h-5 w-5" />
               {t('Bahasa Aplikasi')}
@@ -143,7 +158,7 @@ export default function ApplicationSettings({ isDark, onClose }: ApplicationSett
           </div>
           <button
             type="submit"
-            disabled={!ready || isSaving || selectedLanguage === language}
+            disabled={!ready || isSaving || isClosing || selectedLanguage === language}
             aria-busy={isSaving}
             className="mt-4 min-h-11 w-full rounded-full bg-[#0066cc] px-5 text-[14px] font-medium text-white transition-colors hover:bg-[#0071e3] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0071e3]"
           >

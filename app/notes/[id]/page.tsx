@@ -11,6 +11,8 @@ import { ImSpinner2 } from 'react-icons/im'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
 import type { Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
 import AppleNoteLoader from '@/components/AppleNoteLoader'
+import PageTransition from '@/components/PageTransition'
+import { useAnimatedPresence } from '@/lib/useAnimatedPresence'
 import { useLanguage } from '@/components/LanguageProvider'
 import { getNewNoteFolderId } from '@/lib/new-note-folder'
 
@@ -109,6 +111,9 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   const [showShareModal, setShowShareModal] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [showFolderPicker, setShowFolderPicker] = useState(false)
+  const sharePresence = useAnimatedPresence(showShareModal)
+  const colorPickerPresence = useAnimatedPresence(showColorPicker)
+  const folderPickerPresence = useAnimatedPresence(showFolderPicker)
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -601,6 +606,15 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
 
 
+  useEffect(() => {
+    if (!sharePresence.isPresent) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [sharePresence.isPresent])
+
   // Close share modal on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -840,9 +854,12 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                 />
               </button>
 
-              {showColorPicker && (
+              {colorPickerPresence.isPresent && (
                 <div
-                  className={`absolute right-0 top-[46px] z-50 flex gap-2 rounded-[18px] border p-2.5 shadow-xl backdrop-blur-md ${
+                  data-motion-kind="popover"
+                  data-motion-state={colorPickerPresence.isExiting ? 'closing' : 'open'}
+                  inert={colorPickerPresence.isExiting}
+                  className={`motion-popover absolute right-0 top-[46px] z-50 flex gap-2 rounded-[18px] border p-2.5 shadow-xl backdrop-blur-md ${
                     isDarkMode ? 'border-[#3a3a3e] bg-[#252527]/95' : 'border-[#e0e0e0] bg-white/95'
                   }`}
                 >
@@ -934,7 +951,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       </nav>
 
       {/* 3. Main Note Content Canvas (extra bottom padding pb-36 so floating dock never obscures text) */}
-      <main className="mx-auto flex w-full max-w-[980px] flex-1 flex-col px-4 py-6 pb-36 sm:px-8 sm:py-10 sm:pb-36">
+      <main data-motion-content className="mx-auto flex w-full max-w-[980px] flex-1 flex-col px-4 py-6 pb-36 sm:px-8 sm:py-10 sm:pb-36">
         {/* Note Metadata Strip */}
         <div
           className={`mb-4 flex flex-wrap items-center justify-between gap-2 pb-3 text-[12px] tracking-[-0.12px] ${
@@ -963,9 +980,12 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                   <span className={`text-[10px] ${isDarkMode ? 'text-[#b3b3b8]' : 'text-[#7a7a7a]'}`}><HiOutlineChevronDown aria-hidden="true" /></span>
                 </button>
 
-                {showFolderPicker && (
+                {folderPickerPresence.isPresent && (
                   <div
-                    className={`absolute left-0 top-[30px] z-50 min-w-40 rounded-[14px] border p-1.5 shadow-none ${
+                    data-motion-kind="popover"
+                    data-motion-state={folderPickerPresence.isExiting ? 'closing' : 'open'}
+                    inert={folderPickerPresence.isExiting}
+                    className={`motion-popover absolute left-0 top-[30px] z-50 min-w-40 rounded-[14px] border p-1.5 shadow-none ${
                       isDarkMode ? 'border-[#3a3a3e] bg-[#252527]' : 'border-[#e0e0e0] bg-white'
                     }`}
                   >
@@ -1060,8 +1080,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         style={{
           bottom: 'max(2.25rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))',
         }}
-        className={`fixed left-1/2 -translate-x-1/2 z-40 md:hidden ${
-          showShareModal ? 'hidden' : 'flex'
+        className={`motion-dock fixed left-1/2 -translate-x-1/2 z-40 md:hidden ${
+          sharePresence.isPresent && !colorPickerPresence.isExiting ? 'hidden' : 'flex'
         } items-center gap-1 sm:gap-2 px-3 py-1.5 rounded-full backdrop-blur-2xl saturate-[190%] shadow-[0_8px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all pointer-events-auto ${
           isDarkMode
             ? 'bg-[#252527]/80 border border-white/10 ring-1 ring-white/[0.06]'
@@ -1111,9 +1131,12 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             />
           </button>
 
-          {showColorPicker && (
+          {colorPickerPresence.isPresent && (
             <div
-              className={`absolute bottom-[calc(100%+12px)] left-1/2 -translate-x-1/2 z-50 flex gap-2 rounded-full border p-2 shadow-2xl backdrop-blur-2xl transition-all ${
+              data-motion-kind="popover"
+              data-motion-state={colorPickerPresence.isExiting ? 'closing' : 'open'}
+              inert={colorPickerPresence.isExiting}
+              className={`motion-popover absolute bottom-[calc(100%+12px)] left-1/2 -translate-x-1/2 z-50 flex gap-2 rounded-full border p-2 shadow-2xl backdrop-blur-2xl transition-all ${
                 isDarkMode
                   ? 'border-white/15 bg-[#252527]/95 shadow-[0_12px_36px_rgba(0,0,0,0.6)]'
                   : 'border-white/80 bg-white/95 shadow-[0_12px_36px_rgba(0,0,0,0.2)]'
@@ -1194,8 +1217,13 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       </div>
 
       {/* 6. Apple-Styled Collaboration Modal (Bottom Sheet on Mobile, Dialog on Desktop) */}
-      {showShareModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      {sharePresence.isPresent && (
+        <div
+          data-motion-kind="sheet"
+          data-motion-state={sharePresence.isExiting ? 'closing' : 'open'}
+          inert={sharePresence.isExiting}
+          className="animate-modal-backdrop fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+        >
           {/* Backdrop Blur Overlay */}
           <div
             className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
@@ -1208,7 +1236,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             role="dialog"
             aria-modal="true"
             aria-labelledby="collab-modal-title"
-            className={`relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-[28px] border sm:rounded-[20px] sm:max-w-[480px] backdrop-blur-xl transition-all duration-200 ${
+            data-motion-kind="sheet"
+            className={`animate-modal-enter relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-[28px] border sm:rounded-[20px] sm:max-w-[480px] backdrop-blur-xl transition-all duration-200 ${
               isDarkMode
                 ? 'border-[#3a3a3e] bg-[#252527]/95 text-[#f5f5f7] shadow-[0_20px_60px_rgba(0,0,0,0.6)]'
                 : 'border-[#e0e0e0] bg-white/95 text-[#1d1d1f] shadow-[0_20px_60px_rgba(0,0,0,0.15)]'
@@ -1499,15 +1528,17 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 export default function NoteDetailPage({ isNewOverride }: { isNewOverride?: boolean } = {}) {
   const { t } = useLanguage()
   return (
-    <Suspense
-      fallback={
-        <AppleNoteLoader
-          title={isNewOverride ? t('Membuat Catatan...') : t('Membuka Catatan...')}
-          subtitle={t("Menyiapkan ruang tenang untuk idemu")}
-        />
-      }
-    >
-      <NoteDetailContent isNewOverride={isNewOverride} />
-    </Suspense>
+    <PageTransition>
+      <Suspense
+        fallback={
+          <AppleNoteLoader
+            title={isNewOverride ? t('Membuat Catatan...') : t('Membuka Catatan...')}
+            subtitle={t("Menyiapkan ruang tenang untuk idemu")}
+          />
+        }
+      >
+        <NoteDetailContent isNewOverride={isNewOverride} />
+      </Suspense>
+    </PageTransition>
   )
 }
