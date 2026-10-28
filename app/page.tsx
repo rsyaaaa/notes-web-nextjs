@@ -5,6 +5,10 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
+import { FaApple } from 'react-icons/fa'
+import { FcGoogle } from 'react-icons/fc'
+import { HiStar, HiOutlineChevronDown, HiOutlineDocumentText, HiOutlineTrash, HiOutlineCog, HiOutlineMoon, HiOutlineSun, HiOutlineCheck, HiOutlineX, HiOutlinePlus, HiOutlineLogout, HiOutlineMenuAlt2 } from 'react-icons/hi'
+import { BsPin, BsPinFill } from 'react-icons/bs'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
 import AppleNoteLoader from '@/components/AppleNoteLoader'
 
@@ -1065,7 +1069,7 @@ export default function Home() {
     return (
       <main className={`min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans ${isDarkMode ? 'theme-dark' : ''}`}>
         <header className="flex h-[44px] items-center justify-between gap-3 bg-black px-4 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
-          <span className="font-semibold text-sm"> Notes</span>
+          <span className="font-semibold text-sm"><FaApple aria-hidden="true" className="mr-1 inline-block align-middle" /> Notes</span>
           <span>Catatan pribadimu</span>
         </header>
         <div data-auth-layout className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1120px] items-center justify-center gap-16 px-4 py-8 sm:px-6 sm:py-12 lg:justify-between">
@@ -1174,12 +1178,7 @@ export default function Home() {
               onClick={handleGoogleLogin}
               className="flex min-h-11 w-full items-center justify-center gap-3 rounded-full border border-[#e0e0e0] bg-white px-5 text-[14px] text-[#1d1d1f] transition-colors hover:bg-[#fafafc] active:scale-[0.98]"
             >
-              <svg aria-hidden="true" viewBox="0 0 48 48" className="h-5 w-5">
-                <path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5h6.6c3.9-3.6 6.1-8.8 6.1-14.9Z" />
-                <path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.6-5c-1.8 1.2-4.1 2-6.9 2-5.3 0-9.8-3.6-11.4-8.4H5.8v5.2A20 20 0 0 0 24 44Z" />
-                <path fill="#FBBC05" d="M12.6 27.8a12 12 0 0 1 0-7.6V15H5.8a20 20 0 0 0 0 18l6.8-5.2Z" />
-                <path fill="#EA4335" d="M24 11.8c3 0 5.7 1 7.8 3l5.8-5.8C34.1 5.7 29.5 4 24 4A20 20 0 0 0 5.8 15l6.8 5.2c1.6-4.8 6.1-8.4 11.4-8.4Z" />
-              </svg>
+              <FcGoogle aria-hidden="true" className="h-5 w-5" />
               Masuk dengan Google
             </button>
           </section>
@@ -1220,7 +1219,7 @@ export default function Home() {
                 {(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}
               </span>
             )}
-            <span aria-hidden="true" className="text-[9px] opacity-70">⌄</span>
+            <span aria-hidden="true" className="text-[9px] opacity-70"><HiOutlineChevronDown aria-hidden="true" /></span>
           </button>
 
           {/* Profile Menu Popover: Hanya Nama, Email, dan Tombol Logout */}
@@ -1261,9 +1260,7 @@ export default function Home() {
                       : 'text-[#ff3b30] hover:bg-black/5'
                   }`}
                 >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
+                  <HiOutlineLogout aria-hidden="true" className="h-4 w-4" />
                   <span>Keluar</span>
                 </button>
               </div>
@@ -1294,9 +1291,7 @@ export default function Home() {
                 : 'text-[#1d1d1f] hover:bg-black/5 active:bg-black/10'
             }`}
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h10M4 18h16" />
-            </svg>
+            <HiOutlineMenuAlt2 aria-hidden="true" className="h-5 w-5" />
           </button>
 
           {/* Judul Halaman Aktif */}
@@ -1324,7 +1319,7 @@ export default function Home() {
               isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'
             }`}
           >
-            <span className="text-[15px] leading-none">+</span>
+            <HiOutlinePlus aria-hidden="true" className="text-[15px]" />
             <span className="sm:hidden">{isFormOpen ? 'Tutup' : 'Baru'}</span>
             <span className="hidden sm:inline">{isFormOpen ? 'Tutup Form' : 'Catatan Baru'}</span>
           </button>
@@ -1380,9 +1375,7 @@ export default function Home() {
                   isDarkMode ? 'bg-white/10 text-[#f5f5f7] hover:bg-white/15' : 'bg-black/5 text-[#1d1d1f] hover:bg-black/10'
                 }`}
               >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <HiOutlineX aria-hidden="true" className="h-3.5 w-3.5" />
               </button>
             </div>
 
@@ -1412,7 +1405,7 @@ export default function Home() {
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <span className="text-base">📝</span>
+                      <HiOutlineDocumentText aria-hidden="true" className="text-base" />
                       <span>Catatan Utama</span>
                     </div>
                     <span
@@ -1446,7 +1439,7 @@ export default function Home() {
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <span className="text-base">🗑️</span>
+                      <HiOutlineTrash aria-hidden="true" className="text-base" />
                       <span>Sampah</span>
                     </div>
                     <span
@@ -1486,7 +1479,7 @@ export default function Home() {
                         : 'text-[#1d1d1f] hover:bg-black/5'
                     }`}
                   >
-                    <span className="text-base">⚙️</span>
+                    <HiOutlineCog aria-hidden="true" className="text-base" />
                     <span>Pengaturan Akun</span>
                   </button>
                 </div>
@@ -1506,7 +1499,7 @@ export default function Home() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[12px] font-semibold">
-                      {isPremium ? '★ Paket Premium' : 'Free Plan'}
+                      {isPremium ? <><HiStar aria-hidden="true" className="mr-1 inline-block align-middle" />Paket Premium</> : 'Free Plan'}
                     </span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
@@ -1562,7 +1555,7 @@ export default function Home() {
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-base">{isDarkMode ? '🌙' : '☀️'}</span>
+                    <span className="text-base">{isDarkMode ? <HiOutlineMoon aria-hidden="true" /> : <HiOutlineSun aria-hidden="true" />}</span>
                     <span className="text-[12px] font-medium">
                       {isDarkMode ? 'Mode Gelap' : 'Mode Terang'}
                     </span>
@@ -1676,7 +1669,7 @@ export default function Home() {
                 <button type="button" onClick={() => setIsCreatingFolder(false)} className="min-h-11 rounded-full px-3 text-[14px] text-[#0066cc] active:scale-95">Batal</button>
               </form>
             ) : (
-              <button onClick={() => setIsCreatingFolder(true)} className="min-h-11 rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] active:scale-95">+ Folder</button>
+              <button onClick={() => setIsCreatingFolder(true)} className="min-h-11 rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] active:scale-95"><HiOutlinePlus aria-hidden="true" className="mr-1 inline-block align-middle" />Folder</button>
             )}
           </div>
         )}
@@ -1716,7 +1709,7 @@ export default function Home() {
                   />
                   <p aria-live="polite" className="mt-2 min-h-5 text-[12px] text-[#7a7a7a]">
                     {saveStatus === 'saving' && 'Menyimpan...'}
-                    {saveStatus === 'saved' && '✓ Autosave complete'}
+                    {saveStatus === 'saved' && <><HiOutlineCheck aria-hidden="true" className="mr-1 inline-block align-middle" />Autosave complete</>}
                     {saveStatus === 'error' && 'Gagal menyimpan. Periksa koneksi lalu coba lagi.'}
                   </p>
                 </div>
@@ -1726,7 +1719,7 @@ export default function Home() {
                   onClick={closeNoteForm}
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] text-[#7a7a7a] transition-colors hover:bg-black/5 active:scale-95"
                 >
-                  ×
+                  <HiOutlineX aria-hidden="true" />
                 </button>
               </div>
               <textarea
@@ -1822,7 +1815,7 @@ export default function Home() {
                         className="flex h-11 max-w-[min(56vw,240px)] min-w-[130px] items-center justify-between gap-4 rounded-full border border-[#e0e0e0] bg-white px-4 text-left text-[14px] text-[#1d1d1f] transition-colors hover:bg-[#fafafc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0071e3]"
                       >
                         <span className="truncate">{folders.find((folder) => String(folder.id) === selectedFolderId)?.name ?? 'Tanpa folder'}</span>
-                        <span aria-hidden="true" className={`text-[11px] transition-transform ${isFolderMenuOpen ? 'rotate-180' : ''}`}>⌄</span>
+                        <span aria-hidden="true" className={`text-[11px] transition-transform ${isFolderMenuOpen ? 'rotate-180' : ''}`}><HiOutlineChevronDown aria-hidden="true" /></span>
                       </button>
                     </div>
                   </div>
@@ -1893,7 +1886,7 @@ export default function Home() {
                               : 'bg-black/5 text-[#7a7a7a] sm:opacity-0 sm:group-hover:opacity-100'
                           } ${pinAnimation?.id === note.id ? (pinAnimation.pinning ? 'animate-pin-on' : 'animate-pin-off') : ''}`}
                         >
-                          <span aria-hidden="true" className="mr-1 inline-block">{note.is_pinned ? '📌' : '⌖'}</span>
+                          <span aria-hidden="true" className="mr-1 inline-block">{note.is_pinned ? <BsPinFill aria-hidden="true" /> : <BsPin aria-hidden="true" />}</span>
                           {note.is_pinned ? 'Pinned' : 'Pin'}
                         </button>}
                       </div>
@@ -2072,7 +2065,7 @@ export default function Home() {
               <div className={`mb-5 flex h-11 w-11 items-center justify-center rounded-full text-[21px] font-semibold ${
                 isDarkMode ? 'bg-white/10 text-[#2997ff]' : 'bg-[#f5f5f7] text-[#0066cc]'
               }`} aria-hidden="true">
-                {confirmation.action === 'trash' ? '↘' : '×'}
+                {confirmation.action === 'trash' ? <HiOutlineTrash aria-hidden="true" /> : <HiOutlineX aria-hidden="true" />}
               </div>
               <h2 id="confirmation-title" className={`text-[21px] font-semibold leading-[1.2] tracking-[-0.2px] ${
                 isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
@@ -2145,7 +2138,7 @@ export default function Home() {
                   <h2 id="account-settings-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Pengaturan Akun</h2>
                   <p className={`mt-2 text-[14px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>Kelola informasi profil dan keamanan akun.</p>
                 </div>
-                <button type="button" aria-label="Tutup pengaturan" onClick={() => setIsSettingsOpen(false)} className={`flex h-11 w-11 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}>×</button>
+                <button type="button" aria-label="Tutup pengaturan" onClick={() => setIsSettingsOpen(false)} className={`flex h-11 w-11 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}><HiOutlineX aria-hidden="true" /></button>
               </div>
 
               <div className="mb-6 flex items-center gap-4">
@@ -2223,9 +2216,7 @@ export default function Home() {
                         : 'border border-[#ff3b30]/30 bg-[#ff3b30]/5 text-[#ff3b30] hover:bg-[#ff3b30]/10'
                     }`}
                   >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
+                    <HiOutlineLogout aria-hidden="true" className="h-4 w-4" />
                     <span>Keluar</span>
                   </button>
                 </div>
@@ -2261,13 +2252,13 @@ export default function Home() {
                   <h2 id="premium-offer-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Lebih banyak ruang untuk ide.</h2>
                   <p className={`mt-2 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>Pilih paket untuk langsung mengaktifkan Premium. Pembayaran belum diproses di aplikasi ini.</p>
                 </div>
-                <button type="button" aria-label="Tutup penawaran Premium" onClick={() => { setIsPremiumOfferOpen(false); setOfferMessage('') }} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}>×</button>
+                <button type="button" aria-label="Tutup penawaran Premium" onClick={() => { setIsPremiumOfferOpen(false); setOfferMessage('') }} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}><HiOutlineX aria-hidden="true" /></button>
               </div>
 
               <ul className={`mt-6 space-y-3 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>
-                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}>✓</span><span>Folder untuk mengelompokkan catatan</span></li>
-                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}>✓</span><span>Berbagi dan mengedit catatan bersama kolaborator</span></li>
-                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}>✓</span><span>Pin catatan tanpa batas</span></li>
+                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}><HiOutlineCheck aria-hidden="true" /></span><span>Folder untuk mengelompokkan catatan</span></li>
+                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}><HiOutlineCheck aria-hidden="true" /></span><span>Berbagi dan mengedit catatan bersama kolaborator</span></li>
+                <li className="flex gap-3"><span className={isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}><HiOutlineCheck aria-hidden="true" /></span><span>Pin catatan tanpa batas</span></li>
               </ul>
 
               <div className="mt-6 grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:mt-7">
@@ -2313,10 +2304,10 @@ export default function Home() {
             }`}>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>★ PREMIUM AKTIF</p>
+                  <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}><HiStar aria-hidden="true" className="mr-1 inline-block align-middle" />PREMIUM AKTIF</p>
                   <h2 id="premium-detail-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Paket Premium</h2>
                 </div>
-                <button type="button" aria-label="Tutup detail paket" onClick={() => setPremiumDetailOpen(false)} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}>×</button>
+                <button type="button" aria-label="Tutup detail paket" onClick={() => setPremiumDetailOpen(false)} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[24px] active:scale-95 ${isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'}`}><HiOutlineX aria-hidden="true" /></button>
               </div>
               <p className={`mt-4 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>
                 {profile?.premium_expires_at
@@ -2348,7 +2339,7 @@ export default function Home() {
                 ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7]'
                 : 'border-[#e0e0e0] bg-white/95 text-[#1d1d1f]'
             }`}>
-              <div className={`mb-5 flex h-11 w-11 items-center justify-center rounded-full text-[21px] ${isDarkMode ? 'bg-white/10 text-[#2997ff]' : 'bg-[#f5f5f7] text-[#0066cc]'}`} aria-hidden="true">★</div>
+              <div className={`mb-5 flex h-11 w-11 items-center justify-center rounded-full text-[21px] ${isDarkMode ? 'bg-white/10 text-[#2997ff]' : 'bg-[#f5f5f7] text-[#0066cc]'}`} aria-hidden="true"><HiStar aria-hidden="true" /></div>
               <p className={`mb-2 text-[12px] font-semibold ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>PREMIUM AKTIF</p>
               <h2 id="premium-success-title" className={`text-[28px] font-semibold leading-[1.14] tracking-[-0.3px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>Akunmu sekarang Premium.</h2>
               <p className={`mt-3 text-[17px] leading-[1.47] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>

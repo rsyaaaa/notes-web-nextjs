@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
+import { FaApple } from 'react-icons/fa'
+import { HiOutlineChevronDown, HiOutlineFolder, HiOutlineSearch, HiPlus, HiStar } from 'react-icons/hi'
 import { supabase } from '@/lib/supabaseClient'
 import type { Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
 
@@ -334,10 +336,10 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
       {/* 1. Global Nav (44px pure black #000000) */}
       <header className="sticky top-0 z-50 flex h-[44px] items-center justify-between border-b border-black/10 bg-[#000000] px-4 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
         <div className="flex items-center gap-2">
-          <span className="text-base"></span>
+          <FaApple aria-hidden="true" className="text-base" />
           <span className="font-semibold tracking-normal">Notes</span>
           <span className="ml-1 rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] text-white/90">
-            {isPremium ? '★ Premium' : 'Free Plan'}
+            {isPremium ? <><HiStar aria-hidden="true" className="inline align-middle" /> Premium</> : 'Free Plan'}
           </span>
         </div>
 
@@ -358,7 +360,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
               </span>
             )}
             <span className="hidden max-w-[140px] truncate text-[12px] sm:inline">{profile?.full_name || user.email}</span>
-            <span className="text-[10px] text-white/60">⌄</span>
+            <HiOutlineChevronDown aria-hidden="true" className="text-[10px] text-white/60" />
           </button>
 
           {isProfileMenuOpen && (
@@ -424,7 +426,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
             onClick={handleNewNoteClick}
             className="flex min-h-[38px] items-center rounded-full bg-[#0066cc] px-4 text-[14px] font-normal text-white transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3]"
           >
-            + Catatan Baru
+            <HiPlus aria-hidden="true" className="mr-1 shrink-0" /> Catatan Baru
           </button>
         ) : (
           trashedNotes.length > 0 && (
@@ -446,7 +448,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
           {/* Apple Search Input Pill */}
           <div className="relative w-full sm:max-w-xs">
             <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[14px] text-[#7a7a7a]">
-              🔍
+              <HiOutlineSearch aria-hidden="true" />
             </span>
             <input
               type="text"
@@ -499,7 +501,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                   onClick={() => setIsCreatingFolder(true)}
                   className="flex min-h-[44px] items-center rounded-full border border-[#0066cc] px-4 text-[14px] font-normal text-[#0066cc] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3]"
                 >
-                  + Folder
+                  <HiPlus aria-hidden="true" className="mr-1 shrink-0" /> Folder
                 </button>
               )}
             </div>
@@ -512,14 +514,14 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
             <div className="py-24 text-center">
               <p className="text-[21px] font-semibold tracking-[-0.28px] text-[#1d1d1f]">Belum ada catatan</p>
               <p className="mt-2 text-[17px] leading-[1.47] tracking-[-0.374px] text-[#7a7a7a]">
-                Klik &quot;+ Catatan Baru&quot; di atas untuk mulai menulis ide dan rencanamu.
+                Klik &quot;<HiPlus aria-hidden="true" className="inline align-middle" /> Catatan Baru&quot; di atas untuk mulai menulis ide dan rencanamu.
               </p>
               <button
                 type="button"
                 onClick={handleNewNoteClick}
                 className="mt-6 inline-flex min-h-11 items-center rounded-full bg-[#0066cc] px-6 text-[17px] font-normal text-white transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3]"
               >
-                + Catatan Baru
+                <HiPlus aria-hidden="true" className="mr-1 shrink-0" /> Catatan Baru
               </button>
             </div>
           ) : (
@@ -575,7 +577,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
                         <span>{formatDate(note.updated_at || note.created_at)}</span>
                         {folder && (
                           <span className="rounded-full bg-black/5 px-2 py-0.5 text-[11px] text-[#1d1d1f]">
-                            📁 {folder.name}
+                            <HiOutlineFolder aria-hidden="true" className="inline align-middle" /> {folder.name}
                           </span>
                         )}
                       </div>

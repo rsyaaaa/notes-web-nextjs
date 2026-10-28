@@ -4,6 +4,10 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
+import { FaApple } from 'react-icons/fa'
+import { HiStar, HiOutlineExclamation, HiOutlineChevronLeft, HiOutlineChevronDown, HiOutlineFolder, HiOutlineMail, HiOutlineUsers, HiOutlineTrash, HiOutlineCheck } from 'react-icons/hi'
+import { BsPin, BsPinFill } from 'react-icons/bs'
+import { ImSpinner2 } from 'react-icons/im'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
 import type { Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
 import AppleNoteLoader from '@/components/AppleNoteLoader'
@@ -678,7 +682,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             isDarkMode ? 'border-[#3a3a3e] bg-[#252527]' : 'border-[#e0e0e0] bg-white'
           }`}
         >
-          <span className="text-3xl">⚠️</span>
+          <HiOutlineExclamation aria-hidden="true" className="inline-block text-3xl" />
           <h1 className="mt-3 text-[21px] font-semibold tracking-[-0.28px]">Catatan Tidak Tersedia</h1>
           <p
             className={`mt-2 text-[17px] leading-[1.47] tracking-[-0.374px] ${
@@ -694,7 +698,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
               isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
             }`}
           >
-            ‹ Kembali ke Catatan
+            <HiOutlineChevronLeft aria-hidden="true" className="mr-1 h-5 w-5" /> Kembali ke Catatan
           </button>
         </div>
       </main>
@@ -720,14 +724,14 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             aria-label="Kembali ke beranda"
             className="flex items-center gap-1.5 text-white hover:text-white/80 active:scale-95 transition-transform"
           >
-            <span className="text-base"></span>
+            <FaApple aria-hidden="true" className="text-base" />
             <span className="font-semibold tracking-normal">Notes</span>
           </button>
         </div>
 
         <div className="flex items-center gap-3">
           <span className="text-[12px] text-[#cccccc]">
-            {isPremium ? '★ Premium' : 'Free Plan'}
+            {isPremium ? <><HiStar aria-hidden="true" className="mr-1 inline-block align-middle" />Premium</> : 'Free Plan'}
           </span>
         </div>
       </header>
@@ -751,9 +755,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'
           }`}
         >
-          <svg className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
+          <HiOutlineChevronLeft aria-hidden="true" className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" />
           <span className="hidden sm:inline">Catatan Saya</span>
           <span className="sm:hidden">Catatan</span>
         </button>
@@ -766,10 +768,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         >
           {saveStatus === 'saving' && (
             <span className={`flex items-center gap-1.5 ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>
-              <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
+              <ImSpinner2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
               <span>Menyimpan...</span>
             </span>
           )}
@@ -781,7 +780,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           )}
           {saveStatus === 'error' && (
             <span className="flex items-center gap-1 text-[#ff453a]">
-              <span>⚠ Gagal simpan</span>
+              <HiOutlineExclamation aria-hidden="true" className="h-3.5 w-3.5" />
+              <span>Gagal simpan</span>
             </span>
           )}
           {saveStatus === 'idle' && (
@@ -810,7 +810,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                     : 'border border-[#e0e0e0] bg-white text-[#1d1d1f]'
                 }`}
               >
-                <span>📌</span>
+                {isPinned ? <BsPinFill aria-hidden="true" /> : <BsPin aria-hidden="true" />}
                 <span className="text-[12px] font-normal">{isPinned ? 'Dipin' : 'Pin'}</span>
               </button>
             )}
@@ -887,7 +887,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                     : 'border-[#e0e0e0] bg-white text-[#1d1d1f]'
                 }`}
               >
-                <span>👥</span>
+                <HiOutlineUsers aria-hidden="true" />
                 {collaboratorList.length > 0 && <span className="text-[12px] font-semibold">{collaboratorList.length}</span>}
               </button>
             )}
@@ -905,9 +905,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                     : 'border-[#e0e0e0] bg-white text-[#7a7a7a] hover:text-[#ff3b30]'
                 }`}
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+                <HiOutlineTrash aria-hidden="true" className="h-4 w-4" />
               </button>
             )}
           </div>
@@ -924,10 +922,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             }`}
           >
             {isSubmitting && (
-              <svg className="h-3.5 w-3.5 animate-spin text-white" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
+              <ImSpinner2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-white" />
             )}
             <span>{isSubmitting ? 'Menyimpan...' : 'Selesai'}</span>
           </button>
@@ -959,9 +954,9 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                       : 'border-[#e0e0e0] bg-white/70 text-[#1d1d1f]'
                   }`}
                 >
-                  <span>📁</span>
+                  <HiOutlineFolder aria-hidden="true" />
                   <span>{folders.find((f) => String(f.id) === folderId)?.name || 'Tanpa Folder'}</span>
-                  <span className={`text-[10px] ${isDarkMode ? 'text-[#b3b3b8]' : 'text-[#7a7a7a]'}`}>⌄</span>
+                  <span className={`text-[10px] ${isDarkMode ? 'text-[#b3b3b8]' : 'text-[#7a7a7a]'}`}><HiOutlineChevronDown aria-hidden="true" /></span>
                 </button>
 
                 {showFolderPicker && (
@@ -1086,7 +1081,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                 : 'text-[#1d1d1f] hover:bg-black/5'
             }`}
           >
-            <span>📌</span>
+            {isPinned ? <BsPinFill aria-hidden="true" /> : <BsPin aria-hidden="true" />}
             <span className="font-normal">{isPinned ? 'Dipin' : 'Pin'}</span>
           </button>
         )}
@@ -1163,7 +1158,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
               isDarkMode ? 'text-[#f5f5f7] hover:bg-white/10' : 'text-[#1d1d1f] hover:bg-black/5'
             }`}
           >
-            <span>👥</span>
+            <HiOutlineUsers aria-hidden="true" />
             {collaboratorList.length > 0 && (
               <span
                 className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white ${
@@ -1189,9 +1184,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                 : 'text-[#7a7a7a] hover:text-[#ff3b30] hover:bg-black/5'
             }`}
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
+            <HiOutlineTrash aria-hidden="true" className="h-4 w-4" />
           </button>
         )}
       </div>
@@ -1293,7 +1286,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                             </div>
                           )}
                           <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#34c759] text-[9px] text-white ring-2 ring-white dark:ring-[#1d1d1f]">
-                            ✓
+                            <HiOutlineCheck aria-hidden="true" />
                           </span>
                         </div>
                         <div className="min-w-0 flex-1">
@@ -1389,7 +1382,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                         : 'border-[#e0e0e0] bg-[#f5f5f7]/60'
                     }`}
                   >
-                    <span className="text-2xl">👥</span>
+                    <HiOutlineUsers aria-hidden="true" className="inline-block text-2xl" />
                     <p className="mt-1.5 text-[14px] font-semibold tracking-[-0.2px]">
                       Belum ada kolaborator yang diundang
                     </p>
@@ -1414,7 +1407,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                     <form onSubmit={handleInviteCollaborator} className="space-y-3">
                       <div className="relative flex items-center">
                         <span className="absolute left-4 text-[#7a7a7a] dark:text-[#b3b3b8] text-[15px] pointer-events-none">
-                          ✉️
+                          <HiOutlineMail aria-hidden="true" />
                         </span>
                         <input
                           id="invite-collab-input"
@@ -1440,10 +1433,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                       >
                         {inviteLoading ? (
                           <>
-                            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                            </svg>
+                            <ImSpinner2 aria-hidden="true" className="h-4 w-4 animate-spin" />
                             <span>Mengirim Undangan...</span>
                           </>
                         ) : (
@@ -1459,7 +1449,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                           : 'border-[#fde68a] bg-[#fff8e6]'
                       }`}
                     >
-                      <span className="text-xl">★</span>
+                      <HiStar aria-hidden="true" className="inline-block text-xl" />
                       <p className="mt-1 text-[14px] font-semibold">
                         Fitur Kolaborasi Premium
                       </p>
