@@ -35,3 +35,10 @@ export interface NoteFolder {
   id: number
   name: string
 }
+
+export interface DeletedNoteNotice {
+  id: string
+  note_id: number
+  user_id: string
+  deleted_at: string
+}

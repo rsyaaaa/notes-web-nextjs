@@ -4,12 +4,12 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
-import { FaApple } from 'react-icons/fa'
 import { HiStar, HiOutlineExclamation, HiOutlineChevronLeft, HiOutlineChevronDown, HiOutlineFolder, HiOutlineMail, HiOutlineUsers, HiOutlineTrash, HiOutlineCheck } from 'react-icons/hi'
 import { BsPin, BsPinFill } from 'react-icons/bs'
 import { ImSpinner2 } from 'react-icons/im'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
-import type { Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
+import type { DeletedNoteNotice, Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
+import DeletedNoteCard from '@/components/DeletedNoteCard'
 import AppleNoteLoader from '@/components/AppleNoteLoader'
 import PageTransition from '@/components/PageTransition'
 import { useAnimatedPresence } from '@/lib/useAnimatedPresence'
@@ -86,6 +86,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState<{ source: string; raw?: boolean } | null>(null)
+  const [deletionNotice, setDeletionNotice] = useState<DeletedNoteNotice | null>(null)
+  const deletedRef = useRef(false)
+  const accountScopeRef = useRef<{ active: boolean; userId: string | null }>({ active: true, userId: null })
+  const editorVersionRef = useRef(0)
 
   // Theme state
   const [isDarkMode, setIsDarkMode] = useState(false)
@@ -151,14 +155,81 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
   const collaboratorList = noteMembers.filter((m) => m.user_id !== noteOwnerId)
 
+  const markDeleted = useCallback((notice: DeletedNoteNotice | null) => {
+    // Block already queued saves before React commits the unavailable UI.
+    deletedRef.current = true
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    setDeletionNotice((current) => notice ?? current)
+    setErrorMsg(notice ? null : { source: 'Catatan tidak ditemukan atau Anda tidak memiliki akses.' })
+    setTitle('')
+    setContent('')
+    setAccentColor('#ffffff')
+    setFolderId('')
+    setIsPinned(false)
+    setIsTrashed(false)
+    setCreatedAt('')
+    setUpdatedAt('')
+    setNoteOwnerId('')
+    setOwnerPerson(null)
+    setNoteMembers([])
+    setInviteEmail('')
+    setInviteMsg(null)
+    setShowShareModal(false)
+    setShowColorPicker(false)
+    setShowFolderPicker(false)
+    setSaveStatus('idle')
+    lastSavedRef.current = { title: '', content: '', accentColor: '#ffffff', folderId: '' }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    const scope = { active: true, userId: null as string | null }
+    accountScopeRef.current = scope
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!scope.active) return
+      const userId = session?.user.id ?? null
+      if (scope.userId === null && userId !== null) {
+        scope.userId = userId
+      } else if (_event === 'SIGNED_OUT' || scope.userId !== userId) {
+        // The draft belongs to the original account, even if the next account can access this note.
+        scope.active = false
+        editorVersionRef.current += 1
+        markDeleted(null)
+        setUser(null)
+        setProfile(null)
+        setFolders([])
+        router.replace('/')
+      }
+    })
+    return () => {
+      scope.active = false
+      subscription.unsubscribe()
+    }
+  }, [markDeleted, router])
+
+  const findDeletionNotice = useCallback(async (targetNoteId: number, userId: string) => {
+    const { data, error } = await supabase
+      .from('note_deletion_notices')
+      .select('id, note_id, user_id, deleted_at')
+      .eq('user_id', userId)
+      .eq('note_id', targetNoteId)
+      .maybeSingle()
+    return !error && data ? data as DeletedNoteNotice : null
+  }, [])
+
   // Fetch collaborators separately to avoid invalid foreign key join in PostgREST
   const fetchCollaborators = useCallback(async (targetNoteId: number) => {
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    const isCurrent = () => scope.active && editorVersion === editorVersionRef.current && !deletedRef.current
+    if (!isCurrent()) return
     try {
       const { data: memberRows, error: memberError } = await supabase
         .from('note_members')
         .select('user_id, invited_by')
         .eq('note_id', targetNoteId)
 
+      if (!isCurrent()) return
       if (memberError) {
         console.error('Error fetching note members:', memberError.message)
         setNoteMembers([])
@@ -176,6 +247,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         .select('id, full_name, avatar_url')
         .in('id', userIds)
 
+      if (!isCurrent()) return
       if (profileError) {
         console.error('Error fetching member profiles:', profileError.message)
       }
@@ -190,10 +262,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         }
       })
 
-      setNoteMembers(mapped)
+      if (!deletedRef.current) setNoteMembers(mapped)
     } catch (err) {
       console.error('Failed to fetch collaborators:', err)
-      setNoteMembers([])
+      if (isCurrent()) setNoteMembers([])
     }
   }, [])
 
@@ -205,11 +277,23 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
     }
   }, [content])
 
+  useEffect(() => {
+    deletedRef.current = false
+  }, [isNew, noteId])
+
   // Initialize and fetch note & user data
   useEffect(() => {
     let isMounted = true
+    const scope = accountScopeRef.current
+    const editorVersion = ++editorVersionRef.current
+    const isCurrent = () => isMounted && scope.active && editorVersion === editorVersionRef.current
 
     const init = async () => {
+      if (!isNew) {
+        deletedRef.current = false
+        setDeletionNotice(null)
+        setErrorMsg(null)
+      }
       if (!supabaseConfigReady) {
         setErrorMsg({ source: 'Konfigurasi Supabase belum siap.' })
         setLoading(false)
@@ -217,12 +301,14 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       }
 
       const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!isCurrent()) return
       if (!authUser) {
         router.push('/')
         return
       }
 
-      if (!isMounted) return
+      if (scope.userId !== null && scope.userId !== authUser.id) return
+      scope.userId = authUser.id
       setUser(authUser)
 
       // Fetch profile
@@ -231,7 +317,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         .select('*')
         .eq('id', authUser.id)
         .maybeSingle()
-      if (isMounted && profileData) {
+      if (!isCurrent()) return
+      if (profileData) {
         setProfile(profileData as UserProfile)
       }
 
@@ -241,12 +328,13 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         .select('id, name')
         .eq('user_id', authUser.id)
         .order('name')
-      if (isMounted && folderList) {
+      if (!isCurrent()) return
+      if (folderList) {
         setFolders(folderList as NoteFolder[])
       }
 
       if (isNew) {
-        if (!isMounted) return
+        if (!isCurrent()) return
         setNoteOwnerId(authUser.id)
         setOwnerPerson({
           user_id: authUser.id,
@@ -266,7 +354,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       }
 
       if (!noteId || Number.isNaN(noteId)) {
-        if (isMounted) {
+        if (isCurrent()) {
           setErrorMsg({ source: 'Catatan tidak valid.' })
           setLoading(false)
         }
@@ -280,14 +368,21 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         .eq('id', noteId)
         .maybeSingle()
 
-      if (!isMounted) return
+      if (!isCurrent()) return
 
-      if (noteError || !noteData) {
-        setErrorMsg(noteError?.message ? { source: noteError.message, raw: true } : { source: 'Catatan tidak ditemukan atau Anda tidak memiliki akses.' })
+      if (noteError) {
+        setErrorMsg({ source: noteError.message, raw: true })
         setLoading(false)
         return
       }
+      if (!noteData || (noteData.is_trashed && noteData.user_id !== authUser.id)) {
+        markDeleted(null)
+        const notice = await findDeletionNotice(noteId, authUser.id)
+        if (isCurrent()) markDeleted(notice)
+        return
+      }
 
+      if (deletedRef.current) return
       const fetchedNote = noteData as Note
       setNoteOwnerId(fetchedNote.user_id)
       setTitle(fetchedNote.title || '')
@@ -319,7 +414,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           .select('id, full_name, avatar_url')
           .eq('id', fetchedNote.user_id)
           .maybeSingle()
-        if (isMounted && ownerData) {
+        if (isCurrent() && !deletedRef.current && ownerData) {
           setOwnerPerson({
             user_id: ownerData.id,
             full_name: ownerData.full_name || '',
@@ -329,9 +424,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       }
 
       // Fetch note collaborators
+      if (!isCurrent() || deletedRef.current) return
       await fetchCollaborators(noteId)
 
-      setLoading(false)
+      if (isCurrent()) setLoading(false)
     }
 
     init()
@@ -339,27 +435,61 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
     return () => {
       isMounted = false
     }
-  }, [fetchCollaborators, isNew, noteId, requestedFolder, router])
+  }, [fetchCollaborators, findDeletionNotice, isNew, markDeleted, noteId, requestedFolder, router])
 
   // Realtime subscription for updates
   useEffect(() => {
-    if (!noteId || isNew) return
+    if (!noteId || isNew || !user) return
 
+    let subscribed = true
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    const isCurrent = () => subscribed && scope.active && editorVersion === editorVersionRef.current
+    const checkMissingNote = async () => {
+      if (!isCurrent()) return
+      try {
+        const { data, error } = await supabase.from('notes').select('id, user_id, is_trashed').eq('id', noteId).maybeSingle()
+        if (!isCurrent()) return
+        if (error) {
+          // Connectivity does not establish deletion; keep the unsaved draft available for retry.
+          setSaveStatus('error')
+          return
+        }
+        if (!data || (data.is_trashed && data.user_id !== user.id)) {
+          markDeleted(null)
+          const notice = await findDeletionNotice(noteId, user.id)
+          if (isCurrent() && notice) markDeleted(notice)
+        }
+      } catch {
+        if (isCurrent()) setSaveStatus('error')
+      }
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void checkMissingNote()
+    }
     const channel = supabase
       .channel(`note-detail:${noteId}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'notes', filter: `id=eq.${noteId}` },
         (payload) => {
+          if (!isCurrent()) return
           const updated = payload.new as Note
-          if (updated) {
+          if (updated.is_trashed && updated.user_id !== user.id) {
+            markDeleted(null)
+            void findDeletionNotice(noteId, user.id).then((notice) => {
+              if (isCurrent() && notice) markDeleted(notice)
+            })
+            return
+          }
+          if (updated && !deletedRef.current) {
             setIsPinned(Boolean(updated.is_pinned))
             setIsTrashed(Boolean(updated.is_trashed))
             setUpdatedAt(updated.updated_at)
-            if (updated.title !== title && document.activeElement?.id !== 'note-title-input') {
+            if (document.activeElement?.id !== 'note-title-input') {
               setTitle(updated.title || '')
             }
-            if (updated.content !== content && document.activeElement?.id !== 'note-content-input') {
+            if (document.activeElement?.id !== 'note-content-input') {
               setContent(updated.content || '')
             }
           }
@@ -367,32 +497,62 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       )
       .on(
         'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'notes', filter: `id=eq.${noteId}` },
+        (payload) => {
+          if (!isCurrent() || Number(payload.old.id) !== noteId) return
+          markDeleted(null)
+          void findDeletionNotice(noteId, user.id).then((notice) => {
+            if (isCurrent() && notice) markDeleted(notice)
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
         { event: '*', schema: 'public', table: 'note_members', filter: `note_id=eq.${noteId}` },
         () => {
-          fetchCollaborators(noteId)
+          if (!isCurrent()) return
+          if (!deletedRef.current) void fetchCollaborators(noteId)
+          void checkMissingNote()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'note_deletion_notices', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const notice = payload.new as DeletedNoteNotice
+          if (isCurrent() && Number(notice.note_id) === noteId) markDeleted(notice)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'note_deletion_notices', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const notice = payload.new as DeletedNoteNotice
+          if (isCurrent() && Number(notice.note_id) === noteId) markDeleted(notice)
         }
       )
       .subscribe()
 
+    window.addEventListener('focus', checkMissingNote)
+    document.addEventListener('visibilitychange', handleVisibility)
+    void checkMissingNote()
     return () => {
-      supabase.removeChannel(channel)
+      subscribed = false
+      void supabase.removeChannel(channel)
+      window.removeEventListener('focus', checkMissingNote)
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [content, fetchCollaborators, isNew, noteId, title])
+  }, [fetchCollaborators, findDeletionNotice, isNew, markDeleted, noteId, user])
 
   // Save changes to Supabase
   const saveNote = useCallback(
     async (forceValues?: Partial<NoteDraft & { is_pinned?: boolean; is_trashed?: boolean }>): Promise<boolean> => {
-      let currentUser = user
-      if (!currentUser) {
-        const { data: sessionData } = await supabase.auth.getSession()
-        currentUser = sessionData?.session?.user ?? null
-        if (!currentUser) {
-          const { data: authData } = await supabase.auth.getUser()
-          currentUser = authData?.user ?? null
-        }
-      }
-
-      if (!currentUser) {
+      const scope = accountScopeRef.current
+      const editorVersion = editorVersionRef.current
+      const isCurrent = () => scope.active && editorVersion === editorVersionRef.current && !deletedRef.current
+      if (!isCurrent()) return false
+      const currentUser = user
+      if (!currentUser || scope.userId !== currentUser.id) {
         console.error('Save failed: User is not authenticated')
         setSaveStatus('error')
         return false
@@ -433,6 +593,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       }
 
       try {
+        if (!isCurrent()) return false
         if (isNew) {
           payload.user_id = currentUser.id
           payload.is_pinned = false
@@ -443,6 +604,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             .from('notes')
             .insert(payload)
 
+          if (!isCurrent()) return false
           if (error) {
             console.error('Failed to create note:', error.message)
             setSaveStatus('error')
@@ -462,20 +624,31 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
               .limit(1)
               .maybeSingle()
 
+            if (!isCurrent()) return false
             if (latest?.id) {
               router.replace(`/notes/${latest.id}`)
             }
           }
           return true
         } else if (noteId) {
-          const { error } = await supabase
+          const { data, error } = await supabase
             .from('notes')
             .update(payload)
             .eq('id', noteId)
+            .select('id')
+            .maybeSingle()
 
+          if (!isCurrent()) return false
           if (error) {
             console.error('Failed to update note:', error.message)
             setSaveStatus('error')
+            return false
+          }
+
+          if (!data) {
+            markDeleted(null)
+            const notice = await findDeletionNotice(noteId, currentUser.id)
+            if (scope.active && editorVersion === editorVersionRef.current && notice) markDeleted(notice)
             return false
           }
 
@@ -487,16 +660,16 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         return false
       } catch (err: unknown) {
         console.error('Save error:', err)
-        setSaveStatus('error')
+        if (isCurrent()) setSaveStatus('error')
         return false
       }
     },
-    [accentColor, content, folderId, isNew, noteId, router, title, user]
+    [accentColor, content, findDeletionNotice, folderId, isNew, markDeleted, noteId, router, title, user]
   )
 
   // Auto-save debounced effect on text change
   useEffect(() => {
-    if (loading || isNew) return
+    if (loading || isNew || deletionNotice || errorMsg || deletedRef.current) return
 
     const hasChanged =
       title !== lastSavedRef.current.title ||
@@ -510,8 +683,11 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       clearTimeout(autoSaveTimerRef.current)
     }
 
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
     autoSaveTimerRef.current = setTimeout(() => {
-      saveNote()
+      if (!scope.active || editorVersion !== editorVersionRef.current) return
+      void saveNote()
     }, 800)
 
     return () => {
@@ -519,10 +695,11 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         clearTimeout(autoSaveTimerRef.current)
       }
     }
-  }, [accentColor, content, folderId, isNew, loading, saveNote, title])
+  }, [accentColor, content, deletionNotice, errorMsg, folderId, isNew, loading, saveNote, title])
 
   // Toggle Pin Status
   const handleTogglePin = async () => {
+    if (!accountScopeRef.current.active || deletedRef.current) return
     const nextPinned = !isPinned
     setIsPinned(nextPinned)
     await saveNote({ is_pinned: nextPinned })
@@ -530,21 +707,28 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
   // Toggle Trash Status
   const handleToggleTrash = async () => {
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    if (!scope.active || deletedRef.current) return
     const nextTrashed = !isTrashed
     setIsTrashed(nextTrashed)
-    await saveNote({ is_trashed: nextTrashed })
-    if (nextTrashed) {
+    const saved = await saveNote({ is_trashed: nextTrashed })
+    if (!scope.active || editorVersion !== editorVersionRef.current) return
+    if (saved && nextTrashed) {
       router.push('/')
     }
   }
 
   // Delete permanently
   const handleDeletePermanently = async () => {
-    if (!noteId) return
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    if (!scope.active || !noteId) return
     const confirmed = window.confirm(t('Hapus catatan ini secara permanen?'))
     if (!confirmed) return
 
     const { error } = await supabase.from('notes').delete().eq('id', noteId)
+    if (!scope.active || editorVersion !== editorVersionRef.current) return
     if (error) {
       alert(t('Gagal menghapus: {error}', { error: error.message }))
       return
@@ -555,7 +739,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   // Invite collaborator
   const handleInviteCollaborator = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!noteId || !inviteEmail.trim() || !user) return
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    const isCurrent = () => scope.active && editorVersion === editorVersionRef.current && !deletedRef.current
+    if (!isCurrent() || !noteId || !inviteEmail.trim() || !user) return
 
     setInviteLoading(true)
     setInviteMsg(null)
@@ -566,6 +753,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         collaborator_email: inviteEmail.trim(),
       })
 
+      if (!isCurrent()) return
       if (error) {
         setInviteMsg({ source: 'Gagal: {error}', values: { error: error.message }, isError: true })
       } else {
@@ -574,15 +762,18 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         await fetchCollaborators(noteId)
       }
     } catch (err: unknown) {
-      setInviteMsg(err instanceof Error ? { source: err.message, raw: true, isError: true } : { source: 'Terjadi kesalahan', isError: true })
+      if (isCurrent()) setInviteMsg(err instanceof Error ? { source: err.message, raw: true, isError: true } : { source: 'Terjadi kesalahan', isError: true })
     } finally {
-      setInviteLoading(false)
+      if (isCurrent()) setInviteLoading(false)
     }
   }
 
   // Remove collaborator
   const handleRemoveCollaborator = async (targetUserId: string) => {
-    if (!noteId || !isOwner) return
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    const isCurrent = () => scope.active && editorVersion === editorVersionRef.current && !deletedRef.current
+    if (!isCurrent() || !noteId || !isOwner) return
     const confirmed = window.confirm(t('Hapus kolaborator ini dari catatan?'))
     if (!confirmed) return
 
@@ -593,14 +784,15 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         .eq('note_id', noteId)
         .eq('user_id', targetUserId)
 
+      if (!isCurrent()) return
       if (error) {
         setInviteMsg({ source: 'Gagal: {error}', values: { error: error.message }, isError: true })
       } else {
         await fetchCollaborators(noteId)
-        setInviteMsg({ source: 'Kolaborator berhasil dihapus.' })
+        if (isCurrent()) setInviteMsg({ source: 'Kolaborator berhasil dihapus.' })
       }
     } catch (err: unknown) {
-      setInviteMsg(err instanceof Error ? { source: err.message, raw: true, isError: true } : { source: 'Terjadi kesalahan', isError: true })
+      if (isCurrent()) setInviteMsg(err instanceof Error ? { source: err.message, raw: true, isError: true } : { source: 'Terjadi kesalahan', isError: true })
     }
   }
 
@@ -627,6 +819,13 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   }, [showShareModal])
 
   const handleBackToDashboard = async () => {
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    if (!scope.active) return
+    if (deletedRef.current) {
+      router.push('/')
+      return
+    }
     if (isSubmitting) return
     setIsSubmitting(true)
 
@@ -646,6 +845,11 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
     if (hasUnsaved) {
       const saved = await saveNote()
+      if (!scope.active || editorVersion !== editorVersionRef.current) return
+      if (deletedRef.current) {
+        setIsSubmitting(false)
+        return
+      }
       if (!saved) {
         setIsSubmitting(false)
         isNavigatingAwayRef.current = false
@@ -685,6 +889,19 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         title={isNew ? t('Membuat Catatan...') : t('Membuka Catatan...')}
         subtitle={t("Menyiapkan ruang tenang untuk idemu")}
       />
+    )
+  }
+
+  if (deletionNotice) {
+    return (
+      <main className={`flex min-h-screen flex-col items-center justify-center gap-6 px-4 font-sans ${isDarkMode ? 'bg-[#1d1d1f] text-[#f5f5f7]' : 'bg-[#f5f5f7] text-[#1d1d1f]'}`}>
+        <div className="w-full max-w-[420px]">
+          <DeletedNoteCard notice={deletionNotice} isDark={isDarkMode} />
+        </div>
+        <button type="button" onClick={() => router.push('/')} className="inline-flex min-h-11 items-center rounded-full bg-[#0066cc] px-6 text-[17px] text-white active:scale-95">
+          <HiOutlineChevronLeft aria-hidden="true" className="mr-1 h-5 w-5" /> {t('Kembali ke Catatan')}
+        </button>
+      </main>
     )
   }
 
@@ -742,7 +959,6 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             aria-label={t("Kembali ke beranda")}
             className="flex items-center gap-1.5 text-white hover:text-white/80 active:scale-95 transition-transform"
           >
-            <FaApple aria-hidden="true" className="text-base" />
             <span className="font-semibold tracking-normal">{t("Notes")}</span>
           </button>
         </div>

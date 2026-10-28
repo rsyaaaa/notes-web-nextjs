@@ -1,5 +1,6 @@
 import { homeTranslations } from './i18n-home'
 import { noteTranslations } from './i18n-notes'
+import { deletionTranslations } from './i18n-deletion'
 
 export type Language = 'id' | 'en'
 export type TranslationValues = Record<string, string | number>
@@ -34,6 +35,7 @@ const indonesianLabels: Record<string, string> = {
 export const englishTranslations: Record<string, string> = {
   ...noteTranslations,
   ...homeTranslations,
+  ...deletionTranslations,
   'New Notes': 'New Note',
   'Autosave complete': 'Saved automatically',
   'Buang': 'Move to Trash',

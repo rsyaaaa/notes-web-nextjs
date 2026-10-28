@@ -46,6 +46,30 @@ npm run test:motion
 
 The motion tests exercise lifecycle timing using mocked hooks/timers, reduced motion, retained content, rapid reopen, cleanup, and keyboard-focus restoration. Visual timing and native route transitions still need browser/device testing.
 
+## Account deletion and deleted shared notes
+
+Open **Pengaturan Akun / Account Settings → Hapus Akun / Delete Account**. A server-verified confirmation requires a minimum five-second wait, then the exact phrase `DELETE ACCOUNT NOW`. Successful deletion clears the local session and returns to the login screen. Owned notes (including trash), folders, profile, memberships, and avatar files are removed; other users' notes are not deleted.
+
+### Required deployment setup
+
+1. Apply `supabase/migrations/20261029000100_account_deletion_and_note_notices.sql` to the project's Supabase database, along with any earlier pending migrations (for a linked project, use `supabase db push`). Review/back up the database before applying migrations.
+2. Set **`SUPABASE_SERVICE_ROLE_KEY`** in the server environment, alongside the existing `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Never use a `NEXT_PUBLIC_` prefix for the service-role key, expose it to browser code, or commit it. Restart/redeploy after changing environment variables.
+3. Verify with disposable test accounts in the deployed environment, including a shared note and both interface languages. Local tests do not call live Supabase Auth/Storage.
+
+The API deliberately refuses deletion until its service-role-only readiness RPC confirms the cleanup triggers are installed. Authentication is verified from the current bearer token; the browser cannot choose a different account to delete. The signed confirmation expires after ten minutes.
+
+Collaborators get a noninteractive gray card saying only **“Catatan ini sudah dihapus oleh pemilik.” / “This note has been deleted by its owner.”** Notices retain no title, content, owner ID, or account-deletion reason. Moving a shared note to trash also hides it from collaborators; restoring it clears the notice and restores access. Permanent deletion keeps only recipient-scoped notice metadata. Existing shared notes in trash are backfilled; historical notes already permanently deleted cannot be reconstructed.
+
+Relational cleanup and Auth deletion share a PostgreSQL transaction. Avatar files are removed through the Storage API first because Auth can reject deletion while files are still owned by the account. Storage is not transactional: if the subsequent Auth deletion fails, the avatar may already be gone while the account and notes remain. Never manually delete `storage.objects` rows to work around this.
+
+```bash
+npm run test:account
+# Requires local PostgreSQL binaries (initdb, pg_ctl, psql); uses a temporary isolated database.
+npm run test:account:database
+```
+
+The database tests never connect to the configured Supabase project. They replay migrations against synthetic schemas and check cleanup, rollback, privacy, RLS, and trash/restore behavior. Browser/device visual checks and real Auth/Storage integration still need disposable accounts.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

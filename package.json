@@ -9,7 +9,9 @@
     "lint": "eslint",
     "test:language": "node --test tests/language.test.mjs",
     "test:folders": "node --test tests/new-note-folder.test.mjs",
-    "test:motion": "node --test tests/motion.test.mjs"
+    "test:motion": "node --test tests/motion.test.mjs",
+        "test:account": "node --test tests/account-deletion-server.test.mjs tests/account-deletion-dialog.test.mjs tests/account-deletion-client.test.mjs tests/account-deletion-editors.test.mjs",
+        "test:account:database": "node --test tests/account-deletion-database.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

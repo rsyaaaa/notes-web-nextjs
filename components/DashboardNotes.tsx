@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
-import { FaApple } from 'react-icons/fa'
 import { HiOutlineChevronDown, HiOutlineFolder, HiOutlineSearch, HiPlus, HiStar } from 'react-icons/hi'
 import { supabase } from '@/lib/supabaseClient'
 import { getNewNoteFolderId, getNewNoteHref } from '@/lib/new-note-folder'
-import type { Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
+import type { DeletedNoteNotice, Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
+import DeletedNoteCard from '@/components/DeletedNoteCard'
 import { useLanguage } from '@/components/LanguageProvider'
 import { useAnimatedPresence } from '@/lib/useAnimatedPresence'
 
@@ -36,13 +36,23 @@ const ACCENT_COLORS = [
   { label: 'Merah Muda', hex: '#ffe4e6', surface: '#fff1f2', border: '#fecdd3' },
 ]
 
-export default function DashboardNotes({ user, initialProfile, onLogout }: DashboardNotesProps) {
+export default function DashboardNotes(props: DashboardNotesProps) {
+  return <AccountDashboardNotes key={props.user.id} {...props} />
+}
+
+function AccountDashboardNotes({ user, initialProfile, onLogout }: DashboardNotesProps) {
   const { locale, t } = useLanguage()
   const router = useRouter()
 
   // State Data
   const [profile, setProfile] = useState<UserProfile | null>(initialProfile ?? null)
   const [notes, setNotes] = useState<Note[]>([])
+  const [deletionNotices, setDeletionNotices] = useState<DeletedNoteNotice[]>([])
+  const deletedNoteIdsRef = useRef(new Set<number>())
+  const notesFetchVersionRef = useRef(0)
+  const accountScopeRef = useRef({ active: true })
+  const editorVersionRef = useRef(0)
+  const [accountValid, setAccountValid] = useState(true)
   const [folders, setFolders] = useState<NoteFolder[]>([])
   const [notePeopleById, setNotePeopleById] = useState<Record<number, NotePerson[]>>({})
   const [activeTab, setActiveTab] = useState<'notes' | 'trash'>('notes')
@@ -70,6 +80,39 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
   const isPremium = profile?.plan === 'premium'
 
   useEffect(() => {
+    const scope = { active: true }
+    accountScopeRef.current = scope
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user.id !== user.id) {
+        scope.active = false
+        editorVersionRef.current += 1
+        setAccountValid(false)
+      }
+    })
+    return () => {
+      scope.active = false
+      subscription.unsubscribe()
+    }
+  }, [user.id])
+
+  useEffect(() => {
+    if (!editingNoteId || !deletionNotices.some((notice) => notice.note_id === editingNoteId)) return
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    const timer = window.setTimeout(() => {
+      if (!scope.active || editorVersion !== editorVersionRef.current) return
+      editorVersionRef.current += 1
+      setIsFormOpen(false)
+      setTitle('')
+      setContent('')
+      setSelectedFolderId('')
+      setAccentColor('#ffffff')
+      lastSavedDraft.current = { title: '', content: '', accentColor: '#ffffff', folderId: '' }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [deletionNotices, editingNoteId])
+
+  useEffect(() => {
     if (!formPresence.isPresent) return
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -92,16 +135,25 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
   // Initial load & Realtime subscription
   useEffect(() => {
     let isMounted = true
+    const scope = accountScopeRef.current
 
     const loadData = async () => {
-      const [profileRes, foldersRes, membershipsRes] = await Promise.all([
+      if (!scope.active || !isMounted) return
+      const version = ++notesFetchVersionRef.current
+      const [profileRes, foldersRes, membershipsRes, noticesRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
         supabase.from('note_folders').select('id, name').eq('user_id', user.id).order('name'),
         supabase.from('note_members').select('note_id').eq('user_id', user.id),
+        supabase.from('note_deletion_notices').select('id, note_id, user_id, deleted_at').eq('user_id', user.id).order('deleted_at', { ascending: false }),
       ])
 
-      if (!isMounted) return
+      if (!scope.active || !isMounted || version !== notesFetchVersionRef.current) return
 
+      if (!noticesRes.error) {
+        const notices = (noticesRes.data ?? []) as DeletedNoteNotice[]
+        deletedNoteIdsRef.current = new Set(notices.map((notice) => notice.note_id))
+        setDeletionNotices(notices)
+      }
       if (profileRes.data) {
         setProfile(profileRes.data as UserProfile)
       }
@@ -121,10 +173,10 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
         .order('is_pinned', { ascending: false })
         .order('updated_at', { ascending: false })
 
-      if (!isMounted) return
+      if (!scope.active || !isMounted || version !== notesFetchVersionRef.current) return
 
       if (noteList) {
-        setNotes(noteList as Note[])
+        setNotes((noteList as Note[]).filter((note) => !note.is_trashed || note.user_id === user.id))
 
         const noteIds = noteList.map((n) => n.id)
         if (noteIds.length > 0) {
@@ -133,7 +185,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
             .select('note_id, user_id, profiles:user_id(full_name, avatar_url)')
             .in('note_id', noteIds)
 
-          if (isMounted && memberData) {
+          if (scope.active && isMounted && version === notesFetchVersionRef.current && memberData) {
             const raw = memberData as unknown as MemberQueryResult[]
             const map: Record<number, NotePerson[]> = {}
             for (const m of raw) {
@@ -157,11 +209,30 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, () => {
         loadData()
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'note_deletion_notices', filter: `user_id=eq.${user.id}` }, (payload) => {
+        if (!scope.active || !isMounted) return
+        if (payload.eventType !== 'DELETE') {
+          const notice = payload.new as DeletedNoteNotice
+          deletedNoteIdsRef.current.add(notice.note_id)
+          setDeletionNotices((current) => [notice, ...current.filter((item) => item.note_id !== notice.note_id)])
+        }
+        void loadData()
+      })
       .subscribe()
 
+    const refresh = () => { void loadData() }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    window.addEventListener('focus', refresh)
+    window.addEventListener('notes-refresh', refresh)
+    document.addEventListener('visibilitychange', handleVisibility)
     return () => {
       isMounted = false
-      supabase.removeChannel(channel)
+      void supabase.removeChannel(channel)
+      window.removeEventListener('focus', refresh)
+      window.removeEventListener('notes-refresh', refresh)
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [user.id])
 
@@ -183,11 +254,26 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
 
   // Refetch notes helper
   const reloadNotes = async () => {
+    const scope = accountScopeRef.current
+    if (!scope.active) return
+    const version = ++notesFetchVersionRef.current
+    const { data: notices, error: noticesError } = await supabase
+      .from('note_deletion_notices')
+      .select('id, note_id, user_id, deleted_at')
+      .eq('user_id', user.id)
+      .order('deleted_at', { ascending: false })
+    if (!scope.active || version !== notesFetchVersionRef.current) return
+    if (!noticesError) {
+      const nextNotices = (notices ?? []) as DeletedNoteNotice[]
+      deletedNoteIdsRef.current = new Set(nextNotices.map((notice) => notice.note_id))
+      setDeletionNotices(nextNotices)
+    }
     const { data: memberships } = await supabase
       .from('note_members')
       .select('note_id')
       .eq('user_id', user.id)
 
+    if (!scope.active || version !== notesFetchVersionRef.current) return
     const sharedIds = (memberships ?? []).map((m: { note_id: number }) => m.note_id)
     const visibilityFilter = sharedIds.length > 0
       ? `user_id.eq.${user.id},id.in.(${sharedIds.join(',')})`
@@ -200,13 +286,17 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
       .order('is_pinned', { ascending: false })
       .order('updated_at', { ascending: false })
 
+    if (!scope.active || version !== notesFetchVersionRef.current) return
     if (noteList) {
-      setNotes(noteList as Note[])
+      setNotes((noteList as Note[]).filter((note) => !note.is_trashed || note.user_id === user.id))
     }
   }
 
   // Handle Note Card Click (Mobile -> New Page, Desktop -> Inline Editor Modal)
   const handleNoteClick = (note: Note) => {
+    if (!accountScopeRef.current.active) return
+    editorVersionRef.current += 1
+    setIsSaving(false)
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       router.push(`/notes/${note.id}`)
     } else {
@@ -227,6 +317,9 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
 
   // Handle New Note Click (Mobile -> /notes/new, Desktop -> Open Form)
   const handleNewNoteClick = () => {
+    if (!accountScopeRef.current.active) return
+    editorVersionRef.current += 1
+    setIsSaving(false)
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       router.push(getNewNoteHref(folderFilter, folders))
     } else {
@@ -244,6 +337,11 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
   // Save Note in Desktop Modal
   const handleSaveModal = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    const isCurrent = () => scope.active && editorVersion === editorVersionRef.current
+    if (!isCurrent()) return
+    if (editingNoteId && deletedNoteIdsRef.current.has(editingNoteId)) return
     if (!title.trim() && !content.trim()) {
       setIsFormOpen(false)
       return
@@ -258,31 +356,47 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
       updated_at: new Date().toISOString(),
     }
 
-    if (editingNoteId) {
-      const { error } = await supabase.from('notes').update(payload).eq('id', editingNoteId)
-      setIsSaving(false)
-      if (!error) {
-        await reloadNotes()
-        setIsFormOpen(false)
+    try {
+      const { data, error } = editingNoteId !== null
+        ? await supabase.from('notes').update(payload).eq('id', editingNoteId).select('id').maybeSingle()
+        : await supabase.from('notes').insert({
+          ...payload, user_id: user.id, is_pinned: false, is_trashed: false,
+        }).select('id').single()
+      if (!isCurrent()) return
+      if (error) return
+      if (!data) {
+        if (editingNoteId !== null) {
+          deletedNoteIdsRef.current.add(editingNoteId)
+          setNotes((current) => current.filter((note) => note.id !== editingNoteId))
+          setTitle('')
+          setContent('')
+          setSelectedFolderId('')
+          setAccentColor('#ffffff')
+          setEditingNoteId(null)
+          setIsFormOpen(false)
+          setIsSaving(false)
+          const missingVersion = ++editorVersionRef.current
+          const { data: notice } = await supabase.from('note_deletion_notices')
+            .select('id, note_id, user_id, deleted_at').eq('user_id', user.id).eq('note_id', editingNoteId).maybeSingle()
+          if (!scope.active || missingVersion !== editorVersionRef.current) return
+          if (notice) setDeletionNotices((current) => [notice, ...current.filter((item) => item.note_id !== editingNoteId)])
+        }
+        return
       }
-    } else {
-      const { error } = await supabase.from('notes').insert({
-        ...payload,
-        user_id: user.id,
-        is_pinned: false,
-        is_trashed: false,
-      })
-      setIsSaving(false)
-      if (!error) {
-        await reloadNotes()
-        setIsFormOpen(false)
-      }
+      if (editingNoteId !== null && deletedNoteIdsRef.current.has(editingNoteId)) return
+      await reloadNotes()
+      if (isCurrent()) setIsFormOpen(false)
+    } catch (error) {
+      console.error('Failed to save note:', error)
+    } finally {
+      if (isCurrent()) setIsSaving(false)
     }
   }
 
   // Pin / Unpin
   const togglePin = async (note: Note, event?: React.MouseEvent) => {
     if (event) event.stopPropagation()
+    if (!accountScopeRef.current.active) return
     const nextPinned = !note.is_pinned
     await supabase.from('notes').update({ is_pinned: nextPinned }).eq('id', note.id)
     await reloadNotes()
@@ -290,18 +404,21 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
 
   // Move to trash / Restore
   const handleTrashToggle = async (note: Note, moveToTrash: boolean) => {
+    if (!accountScopeRef.current.active) return
     await supabase.from('notes').update({ is_trashed: moveToTrash }).eq('id', note.id)
     await reloadNotes()
   }
 
   // Permanent Delete
   const handlePermanentDelete = async (noteId: number) => {
+    if (!accountScopeRef.current.active) return
     await supabase.from('notes').delete().eq('id', noteId)
     await reloadNotes()
   }
 
   // Empty Trash
   const handleEmptyTrash = async () => {
+    if (!accountScopeRef.current.active) return
     await supabase.from('notes').delete().eq('user_id', user.id).eq('is_trashed', true)
     await reloadNotes()
   }
@@ -309,22 +426,28 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
   // Create Folder
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!folderName.trim()) return
+    const scope = accountScopeRef.current
+    if (!scope.active || !folderName.trim()) return
     const { error } = await supabase.from('note_folders').insert({
       user_id: user.id,
       name: folderName.trim(),
     })
+    if (!scope.active) return
     if (!error) {
       setFolderName('')
       setIsCreatingFolder(false)
       const { data } = await supabase.from('note_folders').select('id, name').eq('user_id', user.id).order('name')
-      if (data) setFolders(data as NoteFolder[])
+      if (scope.active && data) setFolders(data as NoteFolder[])
     }
   }
 
+  if (!accountValid) return null
+
+  const deletedNoteIds = new Set(deletionNotices.map((notice) => notice.note_id))
+
   // Filter notes
   const activeNotes = notes
-    .filter((n) => !n.is_trashed)
+    .filter((n) => !n.is_trashed && !deletedNoteIds.has(n.id))
     .filter((n) => {
       if (folderFilter === 'all') return true
       if (folderFilter === 'none') return !n.folder_id
@@ -337,7 +460,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
     })
 
   const trashedNotes = notes
-    .filter((n) => n.is_trashed)
+    .filter((n) => n.is_trashed && n.user_id === user.id)
     .filter((n) => {
       if (!searchQuery.trim()) return true
       const q = searchQuery.toLowerCase()
@@ -363,7 +486,6 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
       {/* 1. Global Nav (44px pure black #000000) */}
       <header className="sticky top-0 z-50 flex h-[44px] items-center justify-between border-b border-black/10 bg-[#000000] px-4 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
         <div className="flex items-center gap-2">
-          <FaApple aria-hidden="true" className="text-base" />
           <span className="font-semibold tracking-normal">{t("Notes")}</span>
           <span className="ml-1 rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] text-white/90">
             {isPremium ? <><HiStar aria-hidden="true" className="inline align-middle" /> {t("Premium")}</> : t('Free Plan')}
@@ -546,7 +668,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
 
         {/* Notes Grid (Apple Utility Cards: rounded-lg 18px, 1px hairline border, no drop shadow) */}
         {activeTab === 'notes' ? (
-          activeNotes.length === 0 ? (
+          activeNotes.length === 0 && deletionNotices.length === 0 ? (
             <div className="py-24 text-center">
               <p className="text-[21px] font-semibold tracking-[-0.28px] text-[#1d1d1f]">{t("Belum ada catatan")}</p>
               <p className="mt-2 text-[17px] leading-[1.47] tracking-[-0.374px] text-[#7a7a7a]">
@@ -562,6 +684,9 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
+              {deletionNotices.map((notice) => (
+                <DeletedNoteCard key={notice.id} notice={notice} isDark={isDarkMode} />
+              ))}
               {activeNotes.map((note) => {
                 const accent = ACCENT_COLORS.find((c) => c.hex.toLowerCase() === (note.accent_color || '#ffffff').toLowerCase()) || ACCENT_COLORS[0]
                 const folder = folders.find((f) => f.id === note.folder_id)
@@ -708,7 +833,7 @@ export default function DashboardNotes({ user, initialProfile, onLogout }: Dashb
       </main>
 
       {/* 4. Desktop Note Editor Modal */}
-      {formPresence.isPresent && (
+      {formPresence.isPresent && !deletedNoteIds.has(editingNoteId ?? -1) && (
         <div
           data-motion-state={formPresence.isExiting ? 'closing' : 'open'}
           inert={formPresence.isExiting}

@@ -57,7 +57,7 @@ test('mobile URL carries the selected folder, but not stale or foreign folder ID
 test('desktop dashboard initializes the picker and saved draft with the active folder', () => {
   for (const folderFilter of ['42', 'all', '']) {
     const state = {}
-    const globals = { ...helpers, folders, folderFilter }
+    const globals = { ...helpers, folders, folderFilter, editorVersionRef: { current: 0 } }
     for (const name of ['NoteMembers', 'OnlineMembers', 'EditingNoteId', 'Title', 'Content', 'AccentColor', 'SelectedFolderId', 'LastSavedDraft', 'SaveStatus', 'IsFormOpen']) {
       globals[`set${name}`] = value => { state[name] = value }
     }
@@ -87,6 +87,9 @@ test('alternate dashboard preserves the folder on both screen sizes', () => {
     const lastSavedDraft = { current: null }
     const globals = {
       ...helpers, folders, folderFilter: '7', lastSavedDraft,
+      accountScopeRef: { current: { active: true } },
+      editorVersionRef: { current: 0 },
+      setIsSaving() {},
       window: { innerWidth: width },
       router: { push: href => { state.destination = href } },
     }
@@ -110,6 +113,8 @@ test('new-note page validates the requested folder against folders fetched for t
     const queries = []
     const globals = {
       ...helpers, requestedFolder, isNew: true, isMounted: true, supabaseConfigReady: true, lastSavedRef,
+      isCurrent: () => true,
+      scope: { active: true, userId: authUser.id },
       router: { push() { assert.fail('Unexpected redirect') } },
       supabase: {
         auth: { getUser: async () => ({ data: { user: authUser } }) },

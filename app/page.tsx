@@ -5,16 +5,20 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
-import { FaApple } from 'react-icons/fa'
 import { FcGoogle } from 'react-icons/fc'
-import { HiStar, HiOutlineChevronDown, HiOutlineDocumentText, HiOutlineTrash, HiOutlineCog, HiOutlineMoon, HiOutlineSun, HiOutlineCheck, HiOutlineX, HiOutlinePlus, HiOutlineLogout, HiOutlineMenuAlt2 } from 'react-icons/hi'
+import { HiStar, HiOutlineChevronDown, HiOutlineDocumentText, HiOutlineTrash, HiOutlineCog, HiOutlineMoon, HiOutlineSun, HiOutlineCheck, HiOutlineX, HiOutlinePlus, HiOutlineLogout, HiOutlineMenuAlt2, HiOutlineShieldCheck, HiOutlineLockClosed, HiOutlineEye, HiOutlineEyeOff } from 'react-icons/hi'
 import { BsPin, BsPinFill } from 'react-icons/bs'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
 import AppleNoteLoader from '@/components/AppleNoteLoader'
+import RoleGodDashboard from '@/components/RoleGodDashboard'
 import NewNoteButton from '@/components/NewNoteButton'
 import { getNewNoteFolderId, getNewNoteHref } from '@/lib/new-note-folder'
 import { useLanguage } from '@/components/LanguageProvider'
 import ApplicationSettings from '@/components/ApplicationSettings'
+import DeleteAccountDialog from '@/components/DeleteAccountDialog'
+import DeletedNoteCard from '@/components/DeletedNoteCard'
+import type { DeletedNoteNotice } from '@/lib/types'
+import { finishAccountDeletion } from '@/lib/delete-account-client'
 import PageTransition from '@/components/PageTransition'
 import { getMotionDuration, useAnimatedPresence } from '@/lib/useAnimatedPresence'
 
@@ -67,6 +71,11 @@ function HomeContent() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(supabaseConfigReady)
   const [notes, setNotes] = useState<Note[]>([])
+  const [deletionNotices, setDeletionNotices] = useState<DeletedNoteNotice[]>([])
+  const deletedNoteIdsRef = useRef(new Set<number>())
+  const notesFetchVersionRef = useRef(0)
+  const accountScopeRef = useRef<{ userId: string | null }>({ userId: null })
+  const editorVersionRef = useRef(0)
   const [notePeopleById, setNotePeopleById] = useState<Record<number, NotePerson[]>>({})
   const [activeTab, setActiveTab] = useState<'notes' | 'trash'>('notes')
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -100,7 +109,18 @@ function HomeContent() {
   const isMounted = useSyncExternalStore(() => () => {}, () => true, () => false)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isDeleteAccountOpen, setIsDeleteAccountOpen] = useState(false)
   const [isApplicationSettingsOpen, setIsApplicationSettingsOpen] = useState(false)
+
+  // Rolegod state (rasyacarnival@gmail.com exclusive)
+  const [isRoleGodActive, setIsRoleGodActive] = useState(false)
+  const [isRoleGodAuthOpen, setIsRoleGodAuthOpen] = useState(false)
+  const [isRoleGodVerifying, setIsRoleGodVerifying] = useState(false)
+  const [roleGodPasswordInput, setRoleGodPasswordInput] = useState('')
+  const [showRoleGodPassword, setShowRoleGodPassword] = useState(false)
+  const [roleGodAuthError, setRoleGodAuthError] = useState('')
+  const [roleGodVerifiedPassword, setRoleGodVerifiedPassword] = useState('')
+  const [roleGodAuthToken, setRoleGodAuthToken] = useState('')
   const [settingsName, setSettingsName] = useState('')
   const [settingsPassword, setSettingsPassword] = useState('')
   const [showSettingsPassword, setShowSettingsPassword] = useState(false)
@@ -115,6 +135,8 @@ function HomeContent() {
   const noteTitleInputRef = useRef<HTMLInputElement>(null)
   const folderPickerButtonRef = useRef<HTMLButtonElement>(null)
   const folderMenuRef = useRef<HTMLDivElement>(null)
+  const deleteAccountButtonRef = useRef<HTMLButtonElement>(null)
+  const wasDeleteAccountPresentRef = useRef(false)
 
   // State Form Catatan Baru / Edit
   const [title, setTitle] = useState('')
@@ -141,6 +163,7 @@ function HomeContent() {
     && Boolean(profile.premium_expires_at)
     && new Date(profile.premium_expires_at as string).getTime() > currentTime
   const accountSettingsPresence = useAnimatedPresence(isSettingsOpen)
+  const deleteAccountPresence = useAnimatedPresence(isDeleteAccountOpen)
   const applicationSettingsPresence = useAnimatedPresence(isApplicationSettingsOpen)
   const premiumOfferPresence = useAnimatedPresence(isPremiumOfferOpen)
   const premiumDetailPresence = useAnimatedPresence(premiumDetailOpen && isPremium)
@@ -148,6 +171,36 @@ function HomeContent() {
   const confirmationPresence = useAnimatedPresence(confirmation)
   const profileMenuPresence = useAnimatedPresence(isProfileMenuOpen)
   const folderMenuPresence = useAnimatedPresence(isFolderMenuOpen)
+
+  useEffect(() => {
+    if (wasDeleteAccountPresentRef.current && !deleteAccountPresence.isPresent) {
+      deleteAccountButtonRef.current?.focus({ preventScroll: true })
+    }
+    wasDeleteAccountPresentRef.current = deleteAccountPresence.isPresent
+  }, [deleteAccountPresence.isPresent])
+
+  useEffect(() => {
+    if (!editingNoteId || !deletionNotices.some((notice) => notice.note_id === editingNoteId)) return
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    const timer = window.setTimeout(() => {
+      if (scope !== accountScopeRef.current || editorVersion !== editorVersionRef.current) return
+      editorVersionRef.current += 1
+      setIsFormOpen(false)
+      setIsFormClosing(false)
+      setEditingNoteId(null)
+      setIsFolderMenuOpen(false)
+      setTitle('')
+      setContent('')
+      setSelectedFolderId('')
+      setAccentColor('#ffffff')
+      setNoteMembers([])
+      setOnlineMembers([])
+      setSharingMessage('')
+      setInviteEmail('')
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [deletionNotices, editingNoteId])
 
   useEffect(() => {
     const storedTheme = window.localStorage.getItem('notes-theme')
@@ -165,7 +218,9 @@ function HomeContent() {
   const handleClosePageList = useCallback((callback?: () => void) => {
     if (isPageListClosing) return
     setIsPageListClosing(true)
+    const scope = accountScopeRef.current
     setTimeout(() => {
+      if (scope !== accountScopeRef.current) return
       setIsPageListOpen(false)
       setIsPageListClosing(false)
       if (callback) callback()
@@ -173,7 +228,7 @@ function HomeContent() {
   }, [isPageListClosing])
 
   useEffect(() => {
-    if (isPageListOpen || accountSettingsPresence.isPresent || applicationSettingsPresence.isPresent || premiumDetailPresence.isPresent || premiumOfferPresence.isPresent || isFormOpen || confirmationPresence.isPresent || premiumSuccessPresence.isPresent) {
+    if (isPageListOpen || accountSettingsPresence.isPresent || deleteAccountPresence.isPresent || applicationSettingsPresence.isPresent || premiumDetailPresence.isPresent || premiumOfferPresence.isPresent || isFormOpen || confirmationPresence.isPresent || premiumSuccessPresence.isPresent) {
       const originalOverflow = document.body.style.overflow
       const originalTouchAction = document.body.style.touchAction
       document.body.style.overflow = 'hidden'
@@ -183,7 +238,7 @@ function HomeContent() {
         document.body.style.touchAction = originalTouchAction
       }
     }
-  }, [isPageListOpen, accountSettingsPresence.isPresent, applicationSettingsPresence.isPresent, premiumDetailPresence.isPresent, premiumOfferPresence.isPresent, isFormOpen, confirmationPresence.isPresent, premiumSuccessPresence.isPresent])
+  }, [isPageListOpen, accountSettingsPresence.isPresent, deleteAccountPresence.isPresent, applicationSettingsPresence.isPresent, premiumDetailPresence.isPresent, premiumOfferPresence.isPresent, isFormOpen, confirmationPresence.isPresent, premiumSuccessPresence.isPresent])
 
   const toggleDarkMode = () => {
     const nextMode = !isDarkMode
@@ -192,12 +247,28 @@ function HomeContent() {
     document.documentElement.dataset.theme = nextMode ? 'dark' : 'light'
   }
 
-  const fetchNotes = async (userId: string) => {
+  const fetchNotes = useCallback(async (userId: string) => {
+    const scope = accountScopeRef.current
+    if (scope.userId !== userId) return
+    const version = ++notesFetchVersionRef.current
+    const { data: notices, error: noticesError } = await supabase
+      .from('note_deletion_notices')
+      .select('id, note_id, user_id, deleted_at')
+      .eq('user_id', userId)
+      .order('deleted_at', { ascending: false })
+    if (scope !== accountScopeRef.current || version !== notesFetchVersionRef.current) return
+    if (!noticesError) {
+      const nextNotices = (notices ?? []) as DeletedNoteNotice[]
+      deletedNoteIdsRef.current = new Set(nextNotices.map((notice) => notice.note_id))
+      setDeletionNotices(nextNotices)
+    }
+
     const { data: memberships, error: membershipError } = await supabase
       .from('note_members')
       .select('note_id')
       .eq('user_id', userId)
 
+    if (scope !== accountScopeRef.current || version !== notesFetchVersionRef.current) return
     if (membershipError) {
       console.error('Error fetching shared notes:', membershipError.message)
       return
@@ -214,10 +285,11 @@ function HomeContent() {
       .order('is_pinned', { ascending: false })
       .order('updated_at', { ascending: false })
 
+    if (scope !== accountScopeRef.current || version !== notesFetchVersionRef.current) return
     if (error) {
       console.error('Error fetching notes:', error.message)
     } else {
-      const visibleNotes = data || []
+      const visibleNotes = (data || []).filter((note) => !note.is_trashed || note.user_id === userId)
       setNotes(visibleNotes)
 
       if (visibleNotes.length === 0) {
@@ -230,6 +302,7 @@ function HomeContent() {
         .select('note_id, user_id, invited_by')
         .in('note_id', visibleNotes.map((note) => note.id))
 
+      if (scope !== accountScopeRef.current || version !== notesFetchVersionRef.current) return
       if (allMembershipsError) {
         console.error('Error fetching note collaborators:', allMembershipsError.message)
         setNotePeopleById({})
@@ -248,6 +321,7 @@ function HomeContent() {
         .select('id, full_name, avatar_url')
         .in('id', profileIds)
 
+      if (scope !== accountScopeRef.current || version !== notesFetchVersionRef.current) return
       if (peopleError) {
         console.error('Error fetching note collaborator profiles:', peopleError.message)
         setNotePeopleById({})
@@ -274,15 +348,18 @@ function HomeContent() {
       }
       setNotePeopleById(peopleByNote)
     }
-  }
+  }, [])
 
   const fetchProfile = useCallback(async (currentUser: User) => {
+    const scope = accountScopeRef.current
+    if (scope.userId !== currentUser.id) return
     const { data, error } = await supabase
       .from('profiles')
       .select('full_name, avatar_url, plan, premium_expires_at')
       .eq('id', currentUser.id)
       .maybeSingle()
 
+    if (scope !== accountScopeRef.current) return
     if (error) {
       console.error('Error fetching profile:', error.message)
       return
@@ -306,13 +383,15 @@ function HomeContent() {
   }, [lastOfferUserId])
 
   const fetchFolders = async (userId: string) => {
+    const scope = accountScopeRef.current
+    if (scope.userId !== userId) return
     const { data, error } = await supabase
       .from('note_folders')
       .select('id, name')
       .eq('user_id', userId)
       .order('name')
 
-    if (!error) setFolders(data ?? [])
+    if (scope === accountScopeRef.current && !error) setFolders(data ?? [])
   }
 
   // Each accent keeps its saved light value and uses a coordinated surface in dark mode.
@@ -362,12 +441,69 @@ function HomeContent() {
     if (!supabaseConfigReady) return
 
     let isMounted = true
+    let authEventReceived = false
+
+    const acceptUser = (currentUser: User | null) => {
+      const userId = currentUser?.id ?? null
+      if (accountScopeRef.current.userId !== userId) {
+        // Invalidate promises and timers before React renders the next account.
+        accountScopeRef.current = { userId }
+        editorVersionRef.current += 1
+        notesFetchVersionRef.current += 1
+        deletedNoteIdsRef.current.clear()
+        setNotes([])
+        setDeletionNotices([])
+        setNotePeopleById({})
+        setProfile(null)
+        setFolders([])
+        setLastOfferUserId(null)
+        setIsFormOpen(false)
+        setIsFormClosing(false)
+        setEditingNoteId(null)
+        setTitle('')
+        setContent('')
+        setAccentColor('#ffffff')
+        setSelectedFolderId('')
+        const emptyDraft = { title: '', content: '', accentColor: '#ffffff', folderId: '' }
+        currentDraftRef.current = emptyDraft
+        savedDraftRef.current = emptyDraft
+        setLastSavedDraft(emptyDraft)
+        setSaveStatus('idle')
+        setNoteMembers([])
+        setOnlineMembers([])
+        setInviteEmail('')
+        setSharingMessage('')
+        setIsFolderMenuOpen(false)
+        setIsSettingsOpen(false)
+        setIsDeleteAccountOpen(false)
+        setIsProfileMenuOpen(false)
+        setIsPageListOpen(false)
+        setIsPageListClosing(false)
+        setOpeningNoteId(null)
+        setIsPremiumOfferOpen(false)
+        setPremiumDetailOpen(false)
+        setPremiumSuccessExpiry(null)
+        setSettingsName('')
+        setSettingsPassword('')
+        setSettingsMessage('')
+        setIsSettingsSaving(false)
+        setIsCreatingFolder(false)
+        setFolderName('')
+        setPremiumMessage('')
+        setOfferMessage('')
+        setIsActivatingPremium(false)
+        setPinAnimation(null)
+        setConfirmation(null)
+        setFolderFilter('all')
+      }
+      setUser(currentUser)
+    }
 
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        if (!isMounted) return
-        setUser(session?.user ?? null)
+        if (!isMounted || authEventReceived) return
+        acceptUser(session?.user ?? null)
         if (session?.user) {
           await Promise.allSettled([
             fetchNotes(session.user.id),
@@ -388,27 +524,24 @@ function HomeContent() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!isMounted) return
+      authEventReceived = true
       const currentUser = session?.user ?? null
-      setUser(currentUser)
+      acceptUser(currentUser)
       if (currentUser) {
         fetchNotes(currentUser.id)
         fetchProfileRef.current(currentUser)
         fetchFolders(currentUser.id)
-      } else {
-        setNotes([])
-        setNotePeopleById({})
-        setProfile(null)
-        setFolders([])
-        setLastOfferUserId(null)
       }
       setLoading(false)
     })
 
     return () => {
       isMounted = false
+      accountScopeRef.current = { userId: null }
+      editorVersionRef.current += 1
       authListener.subscription.unsubscribe()
     }
-  }, [])
+  }, [fetchNotes])
 
   // Auth Functions
   const handleGoogleLogin = async () => {
@@ -473,7 +606,8 @@ function HomeContent() {
 
   const handleSaveSettings = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!user) return
+    const scope = accountScopeRef.current
+    if (!user || scope.userId !== user.id) return
     setIsSettingsSaving(true)
     setSettingsMessage('')
 
@@ -481,6 +615,7 @@ function HomeContent() {
       .from('profiles')
       .update({ full_name: settingsName.trim() })
       .eq('id', user.id)
+    if (scope !== accountScopeRef.current) return
     if (profileError) {
       setSettingsMessage(profileError.message)
       setIsSettingsSaving(false)
@@ -490,6 +625,7 @@ function HomeContent() {
     const providers = (user.app_metadata?.providers as string[] | undefined) ?? []
     if (settingsPassword && providers.includes('email')) {
       const { error: passwordError } = await supabase.auth.updateUser({ password: settingsPassword })
+      if (scope !== accountScopeRef.current) return
       if (passwordError) {
         setSettingsMessage(passwordError.message)
         setIsSettingsSaving(false)
@@ -499,12 +635,14 @@ function HomeContent() {
     }
 
     await fetchProfile(user)
+    if (scope !== accountScopeRef.current) return
     setSettingsMessage(t('Pengaturan akun tersimpan.'))
     setIsSettingsSaving(false)
   }
 
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!user) return
+    const scope = accountScopeRef.current
+    if (!user || scope.userId !== user.id) return
     const file = event.target.files?.[0]
     if (!file) return
     if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) {
@@ -516,6 +654,7 @@ function HomeContent() {
     const extension = file.name.split('.').pop()?.toLowerCase() || 'png'
     const path = `${user.id}/avatar-${Date.now()}.${extension}`
     const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+    if (scope !== accountScopeRef.current) return
     if (uploadError) {
       setSettingsMessage(uploadError.message)
       setIsSettingsSaving(false)
@@ -527,9 +666,11 @@ function HomeContent() {
       .from('profiles')
       .update({ avatar_url: data.publicUrl })
       .eq('id', user.id)
+    if (scope !== accountScopeRef.current) return
     if (profileError) setSettingsMessage(profileError.message)
     else {
       await fetchProfile(user)
+      if (scope !== accountScopeRef.current) return
       setSettingsMessage(t('Foto profil berhasil diperbarui.'))
     }
     setIsSettingsSaving(false)
@@ -538,8 +679,10 @@ function HomeContent() {
 
   const createFolder = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!user || !isPremium || !folderName.trim()) return
+    const scope = accountScopeRef.current
+    if (!user || scope.userId !== user.id || !isPremium || !folderName.trim()) return
     const { error } = await supabase.from('note_folders').insert({ user_id: user.id, name: folderName.trim() })
+    if (scope !== accountScopeRef.current) return
     if (error) setPremiumMessage(error.message)
     else {
       setFolderName('')
@@ -549,7 +692,9 @@ function HomeContent() {
   }
 
   const inviteCollaborator = async () => {
-    if (!user || !editingNoteId || !isPremium) return
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    if (!user || scope.userId !== user.id || !editingNoteId || !isPremium) return
     const email = inviteEmail.trim()
     if (!email) return
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -561,6 +706,7 @@ function HomeContent() {
       target_note_id: editingNoteId,
       collaborator_email: email,
     })
+    if (scope !== accountScopeRef.current || editorVersion !== editorVersionRef.current) return
     if (error) {
       setSharingMessage(error.message)
       return
@@ -575,50 +721,80 @@ function HomeContent() {
   }
 
   // 3. CRUD & Feature Handlers
+  const saveEditorDraft = useCallback(async (draft: NoteDraft) => {
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    const isCurrent = () => scope === accountScopeRef.current && editorVersion === editorVersionRef.current
+    if (!user || scope.userId !== user.id || (editingNoteId && deletedNoteIdsRef.current.has(editingNoteId))) return false
+    if (!draft.title.trim() && !draft.content.trim()) return false
+    setSaveStatus('saving')
+    const payload = {
+      title: draft.title,
+      content: draft.content,
+      accent_color: draft.accentColor,
+      folder_id: draft.folderId ? Number(draft.folderId) : null,
+      updated_at: new Date().toISOString(),
+    }
+    try {
+      const { data, error } = editingNoteId !== null
+        ? await supabase.from('notes').update(payload).eq('id', editingNoteId).select('id').maybeSingle()
+        : await supabase.from('notes').insert({ ...payload, user_id: user.id }).select('id').single()
+      if (!isCurrent()) return false
+      if (error) {
+        setSaveStatus('error')
+        return false
+      }
+      if (!data) {
+        // A successful zero-row UPDATE confirms access is gone, unlike a network error.
+        if (editingNoteId !== null) {
+          deletedNoteIdsRef.current.add(editingNoteId)
+          setNotes((current) => current.filter((note) => note.id !== editingNoteId))
+          const missingVersion = ++editorVersionRef.current
+          setIsFormOpen(false)
+          setIsFormClosing(false)
+          setEditingNoteId(null)
+          setTitle('')
+          setContent('')
+          setSelectedFolderId('')
+          setAccentColor('#ffffff')
+          setIsFolderMenuOpen(false)
+          setNoteMembers([])
+          setOnlineMembers([])
+          setInviteEmail('')
+          setSharingMessage('')
+          setSaveStatus('idle')
+          const { data: notice } = await supabase.from('note_deletion_notices')
+            .select('id, note_id, user_id, deleted_at').eq('user_id', user.id).eq('note_id', editingNoteId).maybeSingle()
+          if (scope !== accountScopeRef.current || missingVersion !== editorVersionRef.current) return false
+          if (notice) setDeletionNotices((current) => [notice, ...current.filter((item) => item.note_id !== editingNoteId)])
+        }
+        setSaveStatus('error')
+        return false
+      }
+      if (editingNoteId !== null && deletedNoteIdsRef.current.has(editingNoteId)) return false
+      if (editingNoteId === null) setEditingNoteId(data.id)
+      setLastSavedDraft(draft)
+      setSaveStatus('saved')
+      await fetchNotes(user.id)
+      return isCurrent()
+    } catch {
+      if (isCurrent()) setSaveStatus('error')
+      return false
+    }
+  }, [editingNoteId, fetchNotes, user])
+
   const handleSaveNote = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user) return
-    if (!title.trim() && !content.trim()) return
-
-    const draft = { title, content, accentColor, folderId: selectedFolderId }
-    let saveError = false
-    if (editingNoteId) {
-      const { error } = await supabase
-        .from('notes')
-        .update({
-          title,
-          content,
-          accent_color: accentColor,
-          folder_id: selectedFolderId ? Number(selectedFolderId) : null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', editingNoteId)
-
-      saveError = Boolean(error)
-    } else {
-      const { error } = await supabase.from('notes').insert({
-        user_id: user.id,
-        title,
-        content,
-        accent_color: accentColor,
-        folder_id: selectedFolderId ? Number(selectedFolderId) : null,
-      })
-      saveError = Boolean(error)
-    }
-
-    if (saveError) {
-      setSaveStatus('error')
-      return
-    }
-
-    setLastSavedDraft(draft)
-    setSaveStatus('saved')
-    await fetchNotes(user.id)
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    if (!await saveEditorDraft({ title, content, accentColor, folderId: selectedFolderId })) return
+    if (scope !== accountScopeRef.current || editorVersion !== editorVersionRef.current) return
     closeNoteForm()
     setEditingNoteId(null)
   }
 
   const handleEditClick = (note: Note) => {
+    editorVersionRef.current += 1
     setNoteMembers([])
     setOnlineMembers([])
     const draft = {
@@ -638,6 +814,7 @@ function HomeContent() {
   }
 
   const openNewNote = () => {
+    editorVersionRef.current += 1
     setNoteMembers([])
     setOnlineMembers([])
     const emptyDraft = { title: '', content: '', accentColor: '#ffffff', folderId: getNewNoteFolderId(folderFilter, folders) }
@@ -656,7 +833,10 @@ function HomeContent() {
     setNoteMembers([])
     setOnlineMembers([])
     setIsFormClosing(true)
+    const scope = accountScopeRef.current
+    const editorVersion = ++editorVersionRef.current
     window.setTimeout(() => {
+      if (scope !== accountScopeRef.current || editorVersion !== editorVersionRef.current) return
       setIsFormOpen(false)
       setIsFormClosing(false)
     }, getMotionDuration(180))
@@ -720,7 +900,36 @@ function HomeContent() {
       }, 0)
       return () => window.clearTimeout(timer)
     }
-  }, [pathname, user])
+  }, [fetchNotes, pathname, user])
+
+  useEffect(() => {
+    if (!user) return
+    const scope = accountScopeRef.current
+    const refresh = () => { if (scope === accountScopeRef.current) void fetchNotes(user.id) }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    const channel = supabase
+      .channel(`dashboard-deletions:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'note_deletion_notices', filter: `user_id=eq.${user.id}` }, (payload) => {
+        if (scope !== accountScopeRef.current) return
+        if (payload.eventType !== 'DELETE') {
+          const notice = payload.new as DeletedNoteNotice
+          deletedNoteIdsRef.current.add(notice.note_id)
+          setDeletionNotices((current) => [notice, ...current.filter((item) => item.note_id !== notice.note_id)])
+        }
+        refresh()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, refresh)
+      .subscribe()
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      void supabase.removeChannel(channel)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [fetchNotes, user])
 
   // Instant refresh when custom notes-refresh event is dispatched
   useEffect(() => {
@@ -732,7 +941,7 @@ function HomeContent() {
     }
     window.addEventListener('notes-refresh', handleCustomRefresh)
     return () => window.removeEventListener('notes-refresh', handleCustomRefresh)
-  }, [user])
+  }, [fetchNotes, user])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setCurrentTime(Date.now()), 0)
@@ -750,53 +959,15 @@ function HomeContent() {
     const draft = { title, content, accentColor, folderId: selectedFolderId }
     if (JSON.stringify(draft) === JSON.stringify(lastSavedDraft)) return
 
-    const timeout = window.setTimeout(async () => {
-      if (!draft.title.trim() && !draft.content.trim()) return
-      setSaveStatus('saving')
-
-      if (editingNoteId !== null) {
-        const { error } = await supabase
-          .from('notes')
-          .update({
-            title: draft.title,
-            content: draft.content,
-            accent_color: draft.accentColor,
-            folder_id: draft.folderId ? Number(draft.folderId) : null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', editingNoteId)
-
-        if (error) {
-          setSaveStatus('error')
-          return
-        }
-      } else {
-        const { data, error } = await supabase
-          .from('notes')
-          .insert({
-            user_id: user.id,
-            title: draft.title,
-            content: draft.content,
-            accent_color: draft.accentColor,
-            folder_id: draft.folderId ? Number(draft.folderId) : null,
-          })
-          .select('id')
-          .single()
-
-        if (error || !data) {
-          setSaveStatus('error')
-          return
-        }
-        setEditingNoteId(data.id)
-      }
-
-      setLastSavedDraft(draft)
-      setSaveStatus('saved')
-      await fetchNotes(user.id)
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    const timeout = window.setTimeout(() => {
+      if (scope !== accountScopeRef.current || editorVersion !== editorVersionRef.current) return
+      void saveEditorDraft(draft)
     }, 5000)
 
     return () => window.clearTimeout(timeout)
-  }, [accentColor, content, editingNoteId, isFormOpen, lastSavedDraft, selectedFolderId, title, user])
+  }, [accentColor, content, editingNoteId, isFormOpen, lastSavedDraft, saveEditorDraft, selectedFolderId, title, user])
 
   useEffect(() => {
     if (!isFolderMenuOpen) return
@@ -830,12 +1001,16 @@ function HomeContent() {
       return
     }
 
-    let isCurrent = true
+    let subscribed = true
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    const isCurrent = () => subscribed && scope === accountScopeRef.current && editorVersion === editorVersionRef.current
     const loadMembers = async () => {
       const { data: memberRows } = await supabase
         .from('note_members')
         .select('user_id, invited_by')
         .eq('note_id', editingNoteId)
+      if (!isCurrent()) return
       const memberIds = [...new Set([
         user.id,
         ...(memberRows ?? []).flatMap((member) => [member.user_id, member.invited_by]),
@@ -844,7 +1019,7 @@ function HomeContent() {
         .from('profiles')
         .select('id, full_name, avatar_url')
         .in('id', memberIds)
-      if (isCurrent) {
+      if (isCurrent()) {
         setNoteMembers((people ?? []).map((person) => ({
           user_id: person.id,
           full_name: person.full_name,
@@ -861,10 +1036,10 @@ function HomeContent() {
       .on('presence', { event: 'sync' }, () => {
         const presence = channel.presenceState<NotePerson>()
         const people = Object.values(presence).flat().filter((person) => person.user_id !== user.id)
-        if (isCurrent) setOnlineMembers(people)
+        if (isCurrent()) setOnlineMembers(people)
       })
       .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
+        if (isCurrent() && status === 'SUBSCRIBED') {
           await channel.track({
             user_id: user.id,
             full_name: profile?.full_name || user.email || 'Pengguna',
@@ -874,7 +1049,7 @@ function HomeContent() {
       })
 
     return () => {
-      isCurrent = false
+      subscribed = false
       void supabase.removeChannel(channel)
     }
   }, [editingNoteId, isFormOpen, profile?.avatar_url, profile?.full_name, user])
@@ -882,6 +1057,9 @@ function HomeContent() {
   useEffect(() => {
     if (!isFormOpen || editingNoteId === null) return
 
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    let subscribed = true
     const channel = supabase
       .channel(`note-updates:${editingNoteId}`)
       .on('postgres_changes', {
@@ -890,6 +1068,7 @@ function HomeContent() {
         table: 'notes',
         filter: `id=eq.${editingNoteId}`,
       }, (payload) => {
+        if (!subscribed || scope !== accountScopeRef.current || editorVersion !== editorVersionRef.current || deletedNoteIdsRef.current.has(editingNoteId)) return
         const remoteNote = payload.new as Note
         const localDraft = currentDraftRef.current
         const savedDraft = savedDraftRef.current
@@ -915,14 +1094,16 @@ function HomeContent() {
       .subscribe()
 
     return () => {
+      subscribed = false
       void supabase.removeChannel(channel)
     }
   }, [editingNoteId, isFormOpen, t])
 
   useEffect(() => {
-    if (!isFormOpen && !confirmation && !isPremiumOfferOpen && !premiumDetailOpen && !isSettingsOpen && !isApplicationSettingsOpen) return
+    if (!isFormOpen && !confirmation && !isPremiumOfferOpen && !premiumDetailOpen && !isSettingsOpen && !isApplicationSettingsOpen && !isRoleGodAuthOpen) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        if (deleteAccountPresence.isPresent || event.defaultPrevented) return
         closeNoteForm()
         setIsFolderMenuOpen(false)
         setConfirmation(null)
@@ -930,11 +1111,12 @@ function HomeContent() {
         setPremiumDetailOpen(false)
         setIsSettingsOpen(false)
         setIsApplicationSettingsOpen(false)
+        setIsRoleGodAuthOpen(false)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [closeNoteForm, confirmation, isFormOpen, isFormClosing, isPremiumOfferOpen, premiumDetailOpen, isSettingsOpen, isApplicationSettingsOpen])
+  }, [closeNoteForm, confirmation, isFormOpen, isFormClosing, isPremiumOfferOpen, premiumDetailOpen, isSettingsOpen, isApplicationSettingsOpen, isRoleGodAuthOpen, deleteAccountPresence.isPresent])
 
   useEffect(() => {
     const expiresAt = profile?.premium_expires_at
@@ -949,7 +1131,8 @@ function HomeContent() {
   }, [profile?.premium_expires_at])
 
   const togglePin = async (note: Note) => {
-    if (!user) return
+    const scope = accountScopeRef.current
+    if (!user || scope.userId !== user.id) return
     if (!note.is_pinned && note.user_id === user.id && !isPremium) {
       const currentPinnedCount = notes.filter((item) => item.user_id === user.id && item.is_pinned && !item.is_trashed).length
       if (currentPinnedCount >= 3) {
@@ -958,38 +1141,45 @@ function HomeContent() {
       }
     }
     setPinAnimation({ id: note.id, pinning: !note.is_pinned })
-    window.setTimeout(() => setPinAnimation(null), 500)
+    window.setTimeout(() => { if (scope === accountScopeRef.current) setPinAnimation(null) }, 500)
     const { error } = await supabase
       .from('notes')
       .update({ is_pinned: !note.is_pinned, updated_at: new Date().toISOString() })
       .eq('id', note.id)
 
+    if (scope !== accountScopeRef.current) return
     if (!error) fetchNotes(user.id)
     else setPremiumMessage(error.message)
   }
 
   const toggleTrash = async (note: Note) => {
-    if (!user) return
+    const scope = accountScopeRef.current
+    if (!user || scope.userId !== user.id) return
     const { error } = await supabase
       .from('notes')
       .update({ is_trashed: !note.is_trashed, updated_at: new Date().toISOString() })
       .eq('id', note.id)
       .eq('user_id', user.id)
 
+    if (scope !== accountScopeRef.current) return
     if (!error) fetchNotes(user.id)
   }
 
   const deletePermanently = async (note: Note) => {
-    if (!user) return
+    const scope = accountScopeRef.current
+    if (!user || scope.userId !== user.id) return
     const { error } = await supabase
       .from('notes')
       .delete()
       .eq('id', note.id)
       .eq('user_id', user.id)
+    if (scope !== accountScopeRef.current) return
     if (!error) fetchNotes(user.id)
   }
 
   const confirmDestructiveAction = async () => {
+    const scope = accountScopeRef.current
+    if (!user || scope.userId !== user.id) return
     if (!confirmation || confirmationPresence.isExiting) return
     const { action, note } = confirmation
     setConfirmation(null)
@@ -1000,6 +1190,7 @@ function HomeContent() {
         .delete()
         .eq('user_id', user.id)
         .eq('is_trashed', true)
+      if (scope !== accountScopeRef.current) return
       if (error) setPremiumMessage(t('Gagal menghapus catatan: {error}', { error: error.message }))
       else await fetchNotes(user.id)
       return
@@ -1021,8 +1212,9 @@ function HomeContent() {
   }
 
   // Filter Notes berdasarkan Tab
-  const activeNotes = notes.filter((n) => !n.is_trashed && (folderFilter === 'all' || String(n.folder_id ?? '') === folderFilter))
-  const trashedNotes = notes.filter((n) => n.is_trashed)
+  const deletedNoteIds = new Set(deletionNotices.map((notice) => notice.note_id))
+  const activeNotes = notes.filter((n) => !n.is_trashed && !deletedNoteIds.has(n.id) && (folderFilter === 'all' || String(n.folder_id ?? '') === folderFilter))
+  const trashedNotes = notes.filter((n) => n.is_trashed && n.user_id === user?.id)
   const ownedTrashedCount = trashedNotes.filter((note) => note.user_id === user?.id).length
 
   const openPlanDetails = () => {
@@ -1031,12 +1223,15 @@ function HomeContent() {
   }
 
   const activatePremiumPlan = async (durationMonths: 1 | 12) => {
+    const scope = accountScopeRef.current
+    if (!user || scope.userId !== user.id) return
     setIsActivatingPremium(true)
     setOfferMessage('')
     const { data, error } = await supabase.rpc('activate_premium_plan', {
       duration_months: durationMonths,
     })
 
+    if (scope !== accountScopeRef.current) return
     if (error || !data) {
       setOfferMessage(error?.message || t('Paket belum dapat diaktifkan. Coba lagi.'))
       setIsActivatingPremium(false)
@@ -1049,8 +1244,64 @@ function HomeContent() {
     setOfferMessage('')
     setIsPremiumOfferOpen(false)
     setPremiumDetailOpen(false)
-    if (user) await fetchProfile(user)
-    setIsActivatingPremium(false)
+    await fetchProfile(user)
+    if (scope === accountScopeRef.current) setIsActivatingPremium(false)
+  }
+
+  // Rolegod Authentication Handlers
+  const handleOpenRoleGodAuth = () => {
+    setIsSettingsOpen(false)
+    setRoleGodPasswordInput('')
+    setRoleGodAuthError('')
+    setShowRoleGodPassword(false)
+    setIsRoleGodAuthOpen(true)
+  }
+
+  const handleVerifyRoleGodPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setRoleGodAuthError('')
+
+    if (roleGodPasswordInput !== 'hasadestroyed21') {
+      setRoleGodAuthError('Kata sandi salah. Akses Rolegod ditolak.')
+      return
+    }
+
+    setIsRoleGodVerifying(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token || ''
+      if (!token) {
+        setRoleGodAuthError('Sesi autentikasi kedaluwarsa. Silakan muat ulang halaman.')
+        setIsRoleGodVerifying(false)
+        return
+      }
+
+      const res = await fetch('/api/rolegod', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ password: 'hasadestroyed21' }),
+      })
+
+      const json = await res.json()
+      if (!res.ok) {
+        setRoleGodAuthError(json.error || 'Verifikasi server gagal.')
+        setIsRoleGodVerifying(false)
+        return
+      }
+
+      setRoleGodVerifiedPassword('hasadestroyed21')
+      setRoleGodAuthToken(token)
+      setIsRoleGodAuthOpen(false)
+      setIsRoleGodActive(true)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal menghubungi server'
+      setRoleGodAuthError(msg)
+    } finally {
+      setIsRoleGodVerifying(false)
+    }
   }
 
   if (loading || openingNoteId !== null) {
@@ -1095,7 +1346,7 @@ function HomeContent() {
     return (
       <main className={`min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans ${isDarkMode ? 'theme-dark' : ''}`}>
         <header className="flex h-[44px] items-center justify-between gap-3 bg-black px-4 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
-          <span className="font-semibold text-sm"><FaApple aria-hidden="true" className="mr-1 inline-block align-middle" /> Notes</span>
+          <span className="font-semibold text-sm">Notes</span>
           <span>{t('Catatan pribadimu')}</span>
         </header>
         <div data-auth-layout data-motion-content className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1120px] items-center justify-center gap-16 px-4 py-8 sm:px-6 sm:py-12 lg:justify-between">
@@ -1214,6 +1465,19 @@ function HomeContent() {
   }
 
   // --- 2. MAIN DASHBOARD PAGE (Apple Design System) ---
+  const isRoleGodUser = user?.email?.toLowerCase().trim() === 'rasyacarnival@gmail.com'
+
+  // Render Rolegod Dashboard when active
+  if (isRoleGodActive && isRoleGodUser) {
+    return (
+      <RoleGodDashboard
+        isDarkMode={isDarkMode}
+        onExit={() => setIsRoleGodActive(false)}
+        passwordVerified={roleGodVerifiedPassword}
+        authToken={roleGodAuthToken}
+      />
+    )
+  }
   return (
     <div className={`min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans flex flex-col selection:bg-[#0066cc] selection:text-white animate-dashboard-enter ${isDarkMode ? 'theme-dark' : ''}`}>
       {/* Global Thin Nav Bar (Apple Minimalist) */}
@@ -1707,7 +1971,7 @@ function HomeContent() {
         )}
 
         {/* Note editor modal */}
-        {isMounted && isFormOpen && activeTab === 'notes' && createPortal(
+        {isMounted && isFormOpen && !deletedNoteIds.has(editingNoteId ?? -1) && activeTab === 'notes' && createPortal(
           <div
             inert={isFormClosing}
             className={`fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-2 backdrop-blur-sm sm:p-4 ${isFormClosing ? 'animate-modal-backdrop-exit' : 'animate-modal-backdrop'}`}
@@ -1881,13 +2145,16 @@ function HomeContent() {
         {/* TAB 1: UTAMA (Active Notes) */}
         {activeTab === 'notes' && (
           <div key="notes-tab" className="animate-tab-enter">
-            {activeNotes.length === 0 ? (
+            {activeNotes.length === 0 && deletionNotices.length === 0 ? (
               <div className="text-center py-20 text-[#7a7a7a]">
                 <p className="text-[21px] font-semibold mb-2">{t('Belum ada catatan')}</p>
                 <p className="text-[17px]">{t('Klik "{button}" di kanan bawah untuk mulai menulis.', { button: t('New Notes') })}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
+                {deletionNotices.map((notice) => (
+                  <DeletedNoteCard key={notice.id} notice={notice} isDark={isDarkMode} />
+                ))}
                 {activeNotes.map((note, index) => (
                   <article
                     key={note.id}
@@ -2170,7 +2437,8 @@ function HomeContent() {
         {isMounted && accountSettingsPresence.isPresent && createPortal(
           <div
             data-motion-state={accountSettingsPresence.isExiting ? 'closing' : 'open'}
-            inert={accountSettingsPresence.isExiting}
+            inert={accountSettingsPresence.isExiting || deleteAccountPresence.isPresent}
+            aria-hidden={deleteAccountPresence.isPresent || undefined}
             className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm animate-modal-backdrop sm:p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) setIsSettingsOpen(false)
@@ -2178,8 +2446,8 @@ function HomeContent() {
           >
             <form
               onSubmit={handleSaveSettings}
-              role="dialog"
-              aria-modal="true"
+              role={deleteAccountPresence.isPresent ? undefined : 'dialog'}
+              aria-modal={deleteAccountPresence.isPresent ? undefined : true}
               aria-labelledby="account-settings-title"
               className={`max-h-[90dvh] w-full max-w-[520px] overflow-y-auto overscroll-contain rounded-[18px] border p-5 animate-modal-enter sm:max-h-[min(82vh,720px)] sm:p-8 shadow-2xl backdrop-blur-2xl ${
                 isDarkMode
@@ -2247,6 +2515,72 @@ function HomeContent() {
 
               {settingsMessage && <p aria-live="polite" className={`mt-4 text-[14px] ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>{settingsMessage}</p>}
 
+              {/* Seksi Akses Mode Rolegod - Khusus rasyacarnival@gmail.com */}
+              {isRoleGodUser && (
+                <section
+                  className={`mt-7 rounded-[14px] border p-4 transition-all ${
+                    isDarkMode
+                      ? 'border-[#2997ff]/30 bg-[#2997ff]/5 text-[#f5f5f7]'
+                      : 'border-[#0066cc]/25 bg-[#0066cc]/5 text-[#1d1d1f]'
+                  }`}
+                >
+                  <div className="flex flex-col gap-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                          isDarkMode
+                            ? 'bg-[#2997ff]/20 text-[#2997ff]'
+                            : 'bg-[#0066cc]/15 text-[#0066cc]'
+                        }`}
+                      >
+                        <HiOutlineShieldCheck aria-hidden="true" className="text-xl" />
+                      </div>
+                      <div>
+                        <p
+                          className={`text-[15px] font-semibold tracking-[-0.2px] ${
+                            isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'
+                          }`}
+                        >
+                          Mode Rolegod
+                        </p>
+                        <p
+                          className={`text-[12px] ${
+                            isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'
+                          }`}
+                        >
+                          Kelola dan pantau seluruh isi database aplikasi.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleOpenRoleGodAuth}
+                      className={`inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-full px-4 text-[13px] font-medium text-white transition-all active:scale-95 ${
+                        isDarkMode
+                          ? 'bg-[#2997ff] hover:bg-[#0071e3]'
+                          : 'bg-[#0066cc] hover:bg-[#0055b3]'
+                      }`}
+                    >
+                      <span>Beralih ke Rolegod</span>
+                      <span>→</span>
+                    </button>
+                  </div>
+                </section>
+              )}
+
+              <section className={`mt-7 rounded-[12px] border p-4 ${isDarkMode ? 'border-[#ff453a]/30 bg-[#ff453a]/5' : 'border-[#ff3b30]/25 bg-[#ff3b30]/5'}`}>
+                <h3 className={`text-[15px] font-semibold ${isDarkMode ? 'text-[#ff453a]' : 'text-[#ff3b30]'}`}>{t('Hapus Akun')}</h3>
+                <p className={`mt-1 text-[13px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>{t('Hapus akun dan semua catatan milikmu secara permanen.')}</p>
+                <button
+                  type="button"
+                  ref={deleteAccountButtonRef}
+                  onClick={() => setIsDeleteAccountOpen(true)}
+                  className={`mt-3 inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-[14px] transition-colors active:scale-95 ${isDarkMode ? 'border-[#ff453a]/30 text-[#ff453a] hover:bg-[#ff453a]/10' : 'border-[#ff3b30]/30 text-[#ff3b30] hover:bg-[#ff3b30]/10'}`}
+                >
+                  <HiOutlineTrash aria-hidden="true" /> {t('Hapus Akun')}
+                </button>
+              </section>
+
               {/* Seksi Keluar dari Akun ala Apple */}
               <div className="mt-7 border-t border-black/[0.06] pt-5 dark:border-white/[0.08]">
                 <div className="flex flex-col gap-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
@@ -2282,6 +2616,151 @@ function HomeContent() {
               </div>
             </form>
           </div>,
+          document.body
+        )}
+
+        {/* Modal Autentikasi Sandi Rolegod ala Apple */}
+        {isMounted && isRoleGodAuthOpen && createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rolegod-auth-title"
+            className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !isRoleGodVerifying) {
+                setIsRoleGodAuthOpen(false)
+              }
+            }}
+          >
+            <form
+              onSubmit={handleVerifyRoleGodPassword}
+              className={`w-full max-w-[420px] rounded-[24px] border p-6 sm:p-7 shadow-2xl backdrop-blur-2xl animate-modal-enter transition-all ${
+                isDarkMode
+                  ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7]'
+                  : 'border-[#e0e0e0] bg-white/95 text-[#1d1d1f]'
+              }`}
+            >
+              <div className="flex flex-col items-center text-center">
+                <div
+                  className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                    isDarkMode ? 'bg-[#2997ff]/20 text-[#2997ff]' : 'bg-[#0066cc]/10 text-[#0066cc]'
+                  }`}
+                >
+                  <HiOutlineLockClosed className="text-[26px]" aria-hidden="true" />
+                </div>
+
+                <h2
+                  id="rolegod-auth-title"
+                  className="mt-4 text-[21px] font-semibold tracking-[-0.28px]"
+                >
+                  Autentikasi Akses Rolegod
+                </h2>
+
+                <p
+                  className={`mt-1 text-[14px] leading-relaxed ${
+                    isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'
+                  }`}
+                >
+                  Akses khusus <strong className="font-semibold text-[#0066cc] dark:text-[#2997ff]">rasyacarnival@gmail.com</strong>. Masukkan kata sandi pengaman untuk membuka database.
+                </p>
+              </div>
+
+              <div className="mt-6">
+                <label
+                  htmlFor="rolegod-pass-input"
+                  className={`block text-[13px] font-medium ${
+                    isDarkMode ? 'text-[#f5f5f7]' : 'text-[#333333]'
+                  }`}
+                >
+                  Kata Sandi Rolegod
+                </label>
+
+                <div
+                  className={`mt-2 flex h-11 items-center rounded-[10px] border px-3 transition-colors focus-within:ring-2 focus-within:ring-[#0071e3] ${
+                    roleGodAuthError
+                      ? 'border-[#ff453a] bg-[#ff453a]/5'
+                      : isDarkMode
+                      ? 'border-white/15 bg-white/5'
+                      : 'border-[#e0e0e0] bg-white'
+                  }`}
+                >
+                  <input
+                    id="rolegod-pass-input"
+                    type={showRoleGodPassword ? 'text' : 'password'}
+                    value={roleGodPasswordInput}
+                    onChange={(e) => {
+                      setRoleGodPasswordInput(e.target.value)
+                      if (roleGodAuthError) setRoleGodAuthError('')
+                    }}
+                    autoFocus
+                    placeholder="Masukkan kata sandi..."
+                    className={`h-full min-w-0 flex-1 bg-transparent text-[15px] outline-none ${
+                      isDarkMode ? 'text-[#f5f5f7] placeholder-[#86868b]' : 'text-[#1d1d1f] placeholder-[#7a7a7a]'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowRoleGodPassword(!showRoleGodPassword)}
+                    aria-label={showRoleGodPassword ? 'Sembunyikan password' : 'Lihat password'}
+                    className="p-1 text-[#7a7a7a] hover:text-[#1d1d1f] dark:text-[#86868b] dark:hover:text-[#f5f5f7]"
+                  >
+                    {showRoleGodPassword ? (
+                      <HiOutlineEyeOff className="text-[18px]" aria-hidden="true" />
+                    ) : (
+                      <HiOutlineEye className="text-[18px]" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+
+                {roleGodAuthError && (
+                  <p role="alert" className="mt-2 text-[13px] font-medium text-[#ff453a]">
+                    {roleGodAuthError}
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-7 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={isRoleGodVerifying}
+                  onClick={() => setIsRoleGodAuthOpen(false)}
+                  className={`min-h-[40px] rounded-full px-4 text-[14px] font-normal transition-colors active:scale-95 ${
+                    isDarkMode
+                      ? 'text-[#86868b] hover:bg-white/10'
+                      : 'text-[#7a7a7a] hover:bg-[#f5f5f7]'
+                  }`}
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isRoleGodVerifying || !roleGodPasswordInput}
+                  className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-5 text-[14px] font-normal text-white transition-all active:scale-95 disabled:opacity-50 ${
+                    isDarkMode
+                      ? 'bg-[#2997ff] hover:bg-[#0071e3]'
+                      : 'bg-[#0066cc] hover:bg-[#0055b3]'
+                  }`}
+                >
+                  {isRoleGodVerifying && (
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  )}
+                  <span>{isRoleGodVerifying ? 'Memverifikasi...' : 'Buka Rolegod'}</span>
+                </button>
+              </div>
+            </form>
+          </div>,
+          document.body
+        )}
+
+        {isMounted && deleteAccountPresence.isPresent && createPortal(
+          <DeleteAccountDialog
+            userId={user.id}
+            isDark={isDarkMode}
+            isClosing={deleteAccountPresence.isExiting}
+            onClose={() => setIsDeleteAccountOpen(false)}
+            onDeleted={finishAccountDeletion}
+          />,
           document.body
         )}
 

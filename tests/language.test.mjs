@@ -141,7 +141,7 @@ test('translations preserve interpolation placeholders', () => {
 
 test('all literal UI translation keys have English coverage', () => {
   const brands = new Set(['Notes', 'Premium'])
-  for (const file of ['app/page.tsx', 'app/notes/[id]/page.tsx', 'components/DashboardNotes.tsx', 'components/ApplicationSettings.tsx', 'components/NewNoteButton.tsx']) {
+  for (const file of ['app/page.tsx', 'app/notes/[id]/page.tsx', 'components/DashboardNotes.tsx', 'components/ApplicationSettings.tsx', 'components/NewNoteButton.tsx', 'components/DeleteAccountDialog.tsx', 'components/DeletedNoteCard.tsx']) {
     const source = ts.createSourceFile(file, readFileSync(resolve(root, file), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
     function visit(node) {
       if (ts.isCallExpression(node) && node.expression.getText(source) === 't' && ts.isStringLiteral(node.arguments[0])) {

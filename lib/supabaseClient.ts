@@ -18,8 +18,11 @@ const validSupabaseUrl = isValidSupabaseUrl(configuredUrl) ? configuredUrl : und
 const validSupabaseAnonKey = validSupabaseUrl && configuredAnonKey ? configuredAnonKey : undefined
 
 export const supabaseConfigReady = Boolean(validSupabaseUrl && validSupabaseAnonKey)
+// Keep the SDK's default key so existing sessions remain compatible.
+export const supabaseAuthStorageKey = `sb-${new URL(validSupabaseUrl ?? 'https://missing-config.supabase.co').hostname.split('.')[0]}-auth-token`
 
 export const supabase = createClient(
 	validSupabaseUrl ?? 'https://missing-config.supabase.co',
 	validSupabaseAnonKey ?? 'missing-config-anon-key',
+	{ auth: { storageKey: supabaseAuthStorageKey } },
 )
