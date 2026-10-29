@@ -12,8 +12,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Origin tidak diizinkan.' }, { status: 403 })
     }
 
-    const secret = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
+    const secret = (
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_SERVICE_KEY ||
+      process.env.SERVICE_ROLE_KEY
+    )?.trim()
+    const url = (
+      process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      process.env.SUPABASE_URL
+    )?.trim()
 
     if (!secret || !url) {
       return NextResponse.json({ error: 'Konfigurasi server belum lengkap.' }, { status: 503 })

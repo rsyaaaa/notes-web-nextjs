@@ -6,11 +6,12 @@ import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { FcGoogle } from 'react-icons/fc'
-import { HiStar, HiOutlineChevronDown, HiOutlineDocumentText, HiOutlineTrash, HiOutlineCog, HiOutlineMoon, HiOutlineSun, HiOutlineCheck, HiOutlineX, HiOutlinePlus, HiOutlineLogout, HiOutlineMenuAlt2, HiOutlineShieldCheck, HiOutlineLockClosed, HiOutlineEye, HiOutlineEyeOff } from 'react-icons/hi'
+import { HiStar, HiOutlineChevronDown, HiOutlineDocumentText, HiOutlineTrash, HiOutlineCog, HiOutlineMoon, HiOutlineSun, HiOutlineCheck, HiOutlineX, HiOutlinePlus, HiOutlineLogout, HiOutlineMenuAlt2, HiOutlineEye, HiOutlineEyeOff } from 'react-icons/hi'
 import { BsPin, BsPinFill } from 'react-icons/bs'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
 import AppleNoteLoader from '@/components/AppleNoteLoader'
 import RoleGodDashboard from '@/components/RoleGodDashboard'
+import KitsuneMaskIcon from '@/components/KitsuneMaskIcon'
 import NewNoteButton from '@/components/NewNoteButton'
 import { getNewNoteFolderId, getNewNoteHref } from '@/lib/new-note-folder'
 import { useLanguage } from '@/components/LanguageProvider'
@@ -2529,19 +2530,19 @@ function HomeContent() {
                       <div
                         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
                           isDarkMode
-                            ? 'bg-[#2997ff]/20 text-[#2997ff]'
-                            : 'bg-[#0066cc]/15 text-[#0066cc]'
+                            ? 'bg-[#ff375f]/20 text-[#ff375f]'
+                            : 'bg-[#d70015]/15 text-[#d70015]'
                         }`}
                       >
-                        <HiOutlineShieldCheck aria-hidden="true" className="text-xl" />
+                        <KitsuneMaskIcon className="h-5 w-5" aria-hidden="true" />
                       </div>
                       <div>
                         <p
                           className={`text-[15px] font-semibold tracking-[-0.2px] ${
-                            isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'
+                            isDarkMode ? 'text-[#ff375f]' : 'text-[#d70015]'
                           }`}
                         >
-                          Mode Rolegod
+                          God Mode
                         </p>
                         <p
                           className={`text-[12px] ${
@@ -2557,11 +2558,11 @@ function HomeContent() {
                       onClick={handleOpenRoleGodAuth}
                       className={`inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-full px-4 text-[13px] font-medium text-white transition-all active:scale-95 ${
                         isDarkMode
-                          ? 'bg-[#2997ff] hover:bg-[#0071e3]'
-                          : 'bg-[#0066cc] hover:bg-[#0055b3]'
+                          ? 'bg-[#ff375f] hover:bg-[#ff2442]'
+                          : 'bg-[#d70015] hover:bg-[#ba0012]'
                       }`}
                     >
-                      <span>Beralih ke Rolegod</span>
+                      <span>Beralih ke God Mode</span>
                       <span>→</span>
                     </button>
                   </div>
@@ -2643,17 +2644,17 @@ function HomeContent() {
               <div className="flex flex-col items-center text-center">
                 <div
                   className={`flex h-12 w-12 items-center justify-center rounded-full ${
-                    isDarkMode ? 'bg-[#2997ff]/20 text-[#2997ff]' : 'bg-[#0066cc]/10 text-[#0066cc]'
+                    isDarkMode ? 'bg-[#ff375f]/20 text-[#ff375f]' : 'bg-[#d70015]/10 text-[#d70015]'
                   }`}
                 >
-                  <HiOutlineLockClosed className="text-[26px]" aria-hidden="true" />
+                  <KitsuneMaskIcon className="h-7 w-7" aria-hidden="true" />
                 </div>
 
                 <h2
                   id="rolegod-auth-title"
                   className="mt-4 text-[21px] font-semibold tracking-[-0.28px]"
                 >
-                  Autentikasi Akses Rolegod
+                  Autentikasi Akses God Mode
                 </h2>
 
                 <p
@@ -2672,7 +2673,7 @@ function HomeContent() {
                     isDarkMode ? 'text-[#f5f5f7]' : 'text-[#333333]'
                   }`}
                 >
-                  Kata Sandi Rolegod
+                  Kata Sandi God Mode
                 </label>
 
                 <div
@@ -2738,14 +2739,14 @@ function HomeContent() {
                   disabled={isRoleGodVerifying || !roleGodPasswordInput}
                   className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-5 text-[14px] font-normal text-white transition-all active:scale-95 disabled:opacity-50 ${
                     isDarkMode
-                      ? 'bg-[#2997ff] hover:bg-[#0071e3]'
-                      : 'bg-[#0066cc] hover:bg-[#0055b3]'
+                      ? 'bg-[#ff375f] hover:bg-[#ff2442]'
+                      : 'bg-[#d70015] hover:bg-[#ba0012]'
                   }`}
                 >
                   {isRoleGodVerifying && (
                     <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   )}
-                  <span>{isRoleGodVerifying ? 'Memverifikasi...' : 'Buka Rolegod'}</span>
+                  <span>{isRoleGodVerifying ? 'Memverifikasi...' : 'Buka God Mode'}</span>
                 </button>
               </div>
             </form>

@@ -6,7 +6,6 @@ import {
 } from 'react-icons/fc'
 import {
   HiStar,
-  HiOutlineShieldCheck,
   HiOutlineUserGroup,
   HiOutlineDocumentText,
   HiOutlineTrash,
@@ -16,11 +15,11 @@ import {
   HiOutlineRefresh,
   HiOutlineMail,
   HiOutlineShare,
-  HiOutlineLockClosed,
   HiOutlineClock,
   HiOutlineChevronDown,
 } from 'react-icons/hi'
 import { BsPinFill } from 'react-icons/bs'
+import KitsuneMaskIcon from './KitsuneMaskIcon'
 
 export interface RoleGodUser {
   id: string
@@ -360,21 +359,21 @@ export default function RoleGodDashboard({
         }`}
       >
         <div className="mx-auto flex h-[52px] max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-          {/* Left: Brand + Rolegod Pill Badge */}
+          {/* Left: Brand + God Mode Pill Badge with Kitsune Mask */}
           <div className="flex items-center gap-2.5">
-            <span className="font-semibold text-[17px] tracking-[-0.374px]">
+            <h1 className="font-semibold text-[17px] tracking-[-0.374px]">
               Notes
-            </span>
+            </h1>
 
             <div
               className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide uppercase transition-all ${
                 isDarkMode
-                  ? 'border border-[#2997ff]/40 bg-[#2997ff]/15 text-[#2997ff]'
-                  : 'border border-[#0066cc]/30 bg-[#0066cc]/10 text-[#0066cc]'
+                  ? 'border border-[#ff375f]/40 bg-[#ff375f]/15 text-[#ff375f]'
+                  : 'border border-[#d70015]/30 bg-[#d70015]/10 text-[#d70015]'
               }`}
             >
-              <HiOutlineShieldCheck className="text-[13px]" aria-hidden="true" />
-              <span>Rolegod Mode</span>
+              <KitsuneMaskIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>God Mode</span>
             </div>
 
             <span
@@ -422,50 +421,8 @@ export default function RoleGodDashboard({
         </div>
       </header>
 
-      {/* Main Rolegod Container */}
+      {/* Main Container */}
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        {/* Banner Penjelasan & Read-Only Notice */}
-        <div
-          className={`mb-6 rounded-[18px] border p-4 sm:p-5 transition-all ${
-            isDarkMode
-              ? 'border-[#3a3a3e] bg-[#252527]/90 text-[#f5f5f7]'
-              : 'border-[#e0e0e0] bg-white text-[#1d1d1f]'
-          }`}
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[18px]">⚡</span>
-                <h1 className="text-[21px] font-semibold tracking-[-0.28px]">
-                  Database Inspector &amp; Management
-                </h1>
-              </div>
-              <p
-                className={`mt-1 text-[14px] leading-relaxed ${
-                  isDarkMode ? 'text-[#b3b3b8]' : 'text-[#7a7a7a]'
-                }`}
-              >
-                Panel eksklusif untuk memantau data seluruh pengguna, catatan aktif, status kolaborasi,
-                folder, dan isi tempat sampah.
-                <span className="ml-1 inline-flex items-center font-medium text-[#ff9500]">
-                  (Mode Read-Only: pencegahan edit &amp; hapus aktif).
-                </span>
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium ${
-                  isDarkMode
-                    ? 'bg-white/10 text-[#f5f5f7]'
-                    : 'bg-black/5 text-[#1d1d1f]'
-                }`}
-              >
-                <HiOutlineLockClosed aria-hidden="true" />
-                <span>Read-Only Mode</span>
-              </span>
-            </div>
-          </div>
-        </div>
 
         {/* 2. Stats Grid ala Apple Cards */}
         {stats && (
