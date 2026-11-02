@@ -121,6 +121,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [isDirty, setIsDirty] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const lastSavedRef = useRef<NoteDraft>({ title: '', content: '', accentColor: '#ffffff', folderId: '' })
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -178,6 +179,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
     setShowColorPicker(false)
     setShowFolderPicker(false)
     setSaveStatus('idle')
+    setIsDirty(false)
     lastSavedRef.current = { title: '', content: '', accentColor: '#ffffff', folderId: '' }
     setLoading(false)
   }, [])
@@ -349,6 +351,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         setIsPinned(false)
         setIsTrashed(false)
         lastSavedRef.current = { title: '', content: '', accentColor: '#ffffff', folderId: initialFolderId }
+        if (typeof setIsDirty === 'function') setIsDirty(false)
         setLoading(false)
         return
       }
@@ -400,6 +403,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         accentColor: fetchedNote.accent_color || '#ffffff',
         folderId: fetchedNote.folder_id ? String(fetchedNote.folder_id) : '',
       }
+      if (typeof setIsDirty === 'function') setIsDirty(false)
 
       // Fetch note owner profile
       if (fetchedNote.user_id === authUser.id) {
@@ -612,6 +616,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           }
 
           setSaveStatus('saved')
+          setIsDirty(false)
           lastSavedRef.current = draftToSave
 
           if (!isNavigatingAwayRef.current) {
@@ -653,6 +658,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           }
 
           setSaveStatus('saved')
+          setIsDirty(false)
           setUpdatedAt(payload.updated_at as string)
           lastSavedRef.current = draftToSave
           return true
@@ -669,7 +675,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
   // Auto-save debounced effect on text change
   useEffect(() => {
-    if (loading || isNew || deletionNotice || errorMsg || deletedRef.current) return
+    if (loading || isNew || deletionNotice || errorMsg || deletedRef.current || !isDirty) return
 
     const hasChanged =
       title !== lastSavedRef.current.title ||
@@ -695,7 +701,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         clearTimeout(autoSaveTimerRef.current)
       }
     }
-  }, [accentColor, content, deletionNotice, errorMsg, folderId, isNew, loading, saveNote, title])
+  }, [accentColor, content, deletionNotice, errorMsg, folderId, isDirty, isNew, loading, saveNote, title])
 
   // Toggle Pin Status
   const handleTogglePin = async () => {
@@ -839,6 +845,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
     const hasContent = Boolean(title.trim() || content.trim())
     const hasUnsaved =
+      isDirty &&
       hasContent &&
       (isNew ||
         title !== lastSavedRef.current.title ||
@@ -928,30 +935,26 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   if (errorMsg) {
     return (
       <main
-        className={`flex min-h-screen flex-col items-center justify-center px-4 font-sans text-center transition-colors ${
-          isDarkMode ? 'bg-[#1d1d1f] text-[#f5f5f7]' : 'bg-[#f5f5f7] text-[#1d1d1f]'
-        }`}
+        className={`flex min-h-screen flex-col items-center justify-center px-4 font-sans text-center transition-colors ${isDarkMode ? 'bg-[#1d1d1f] text-[#f5f5f7]' : 'bg-[#f5f5f7] text-[#1d1d1f]'
+          }`}
       >
         <div
-          className={`w-full max-w-[420px] rounded-[18px] border p-6 sm:p-8 ${
-            isDarkMode ? 'border-[#3a3a3e] bg-[#252527]' : 'border-[#e0e0e0] bg-white'
-          }`}
+          className={`w-full max-w-[420px] rounded-[18px] border p-6 sm:p-8 ${isDarkMode ? 'border-[#3a3a3e] bg-[#252527]' : 'border-[#e0e0e0] bg-white'
+            }`}
         >
           <HiOutlineExclamation aria-hidden="true" className="inline-block text-3xl" />
           <h1 className="mt-3 text-[21px] font-semibold tracking-[-0.28px]">{t("Catatan Tidak Tersedia")}</h1>
           <p
-            className={`mt-2 text-[17px] leading-[1.47] tracking-[-0.374px] ${
-              isDarkMode ? 'text-[#b3b3b8]' : 'text-[#7a7a7a]'
-            }`}
+            className={`mt-2 text-[17px] leading-[1.47] tracking-[-0.374px] ${isDarkMode ? 'text-[#b3b3b8]' : 'text-[#7a7a7a]'
+              }`}
           >
             {errorMsg.raw ? errorMsg.source : t(errorMsg.source)}
           </p>
           <button
             type="button"
             onClick={() => router.push('/')}
-            className={`mt-6 inline-flex min-h-11 items-center justify-center rounded-full px-6 text-[17px] font-normal text-white transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
-              isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
-            }`}
+            className={`mt-6 inline-flex min-h-11 items-center justify-center rounded-full px-6 text-[17px] font-normal text-white transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
+              }`}
           >
             <HiOutlineChevronLeft aria-hidden="true" className="mr-1 h-5 w-5" /> {t("Kembali ke Catatan")}
           </button>
@@ -966,9 +969,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         backgroundColor: getSurfaceColor(accentColor, isDarkMode),
         color: isDarkMode ? '#f5f5f7' : '#1d1d1f',
       }}
-      className={`flex min-h-screen flex-col font-sans transition-colors duration-200 selection:bg-[#0066cc] selection:text-white ${
-        isDarkMode ? 'theme-dark' : ''
-      }`}
+      className={`flex min-h-screen flex-col font-sans transition-colors duration-200 selection:bg-[#0066cc] selection:text-white ${isDarkMode ? 'theme-dark' : ''
+        }`}
     >
       {/* 1. Global Nav (Pure Black - Desktop Only, completely hidden on mobile per request) */}
       <header className="hidden md:flex sticky top-0 z-50 h-[44px] items-center justify-between border-b border-black/10 bg-[#000000] px-6 md:px-12 text-[12px] tracking-[-0.12px] text-white">
@@ -992,22 +994,19 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
       {/* 2. Top Nav Bar (Clean, single-tier navigation on mobile & desktop) */}
       <nav
-        className={`sticky top-0 md:top-[44px] z-40 flex min-h-[56px] pt-3 pb-3 sm:py-0 sm:h-[50px] sm:min-h-[50px] items-center justify-between border-b px-4 sm:px-6 md:px-12 backdrop-blur-md transition-colors ${
-          isDarkMode
+        className={`sticky top-0 md:top-[44px] z-40 flex min-h-[56px] pt-3 pb-3 sm:py-0 sm:h-[50px] sm:min-h-[50px] items-center justify-between border-b px-4 sm:px-6 md:px-12 backdrop-blur-md transition-colors ${isDarkMode
             ? 'border-[#3a3a3e]/80 bg-[#1d1d1f]/85'
             : 'border-[#e0e0e0]/80 bg-[#f5f5f7]/85'
-        }`}
+          }`}
       >
         {/* Left: Apple Back Button */}
         <button
           type="button"
           onClick={handleBackToDashboard}
           disabled={isSubmitting}
-          className={`group flex min-h-[44px] items-center gap-1 text-[17px] font-normal tracking-[-0.374px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
-            isSubmitting ? 'opacity-60 pointer-events-none' : ''
-          } ${
-            isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'
-          }`}
+          className={`group flex min-h-[44px] items-center gap-1 text-[17px] font-normal tracking-[-0.374px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${isSubmitting ? 'opacity-60 pointer-events-none' : ''
+            } ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'
+            }`}
         >
           <HiOutlineChevronLeft aria-hidden="true" className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" />
           <span className="hidden sm:inline">{t("Catatan Saya")}</span>
@@ -1016,9 +1015,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
         {/* Center: Save Status indicator badge */}
         <div
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] tracking-[-0.12px] transition-all ${
-            isDarkMode ? 'text-[#b3b3b8] bg-white/[0.05]' : 'text-[#7a7a7a] bg-black/[0.04]'
-          }`}
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] tracking-[-0.12px] transition-all ${isDarkMode ? 'text-[#b3b3b8] bg-white/[0.05]' : 'text-[#7a7a7a] bg-black/[0.04]'
+            }`}
         >
           {saveStatus === 'saving' && (
             <span className={`flex items-center gap-1.5 ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>
@@ -1054,15 +1052,14 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                 onClick={handleTogglePin}
                 aria-label={isPinned ? t('Lepas Pin') : t('Pin Catatan')}
                 title={isPinned ? t('Lepas Pin') : t('Pin Catatan')}
-                className={`flex h-[38px] items-center gap-1.5 rounded-full px-3 text-[14px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
-                  isPinned
+                className={`flex h-[38px] items-center gap-1.5 rounded-full px-3 text-[14px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${isPinned
                     ? isDarkMode
                       ? 'bg-[#2997ff] text-white border-transparent'
                       : 'bg-[#0066cc] text-white border-transparent'
                     : isDarkMode
-                    ? 'border border-[#3a3a3e] bg-[#252527] text-[#f5f5f7]'
-                    : 'border border-[#e0e0e0] bg-white text-[#1d1d1f]'
-                }`}
+                      ? 'border border-[#3a3a3e] bg-[#252527] text-[#f5f5f7]'
+                      : 'border border-[#e0e0e0] bg-white text-[#1d1d1f]'
+                  }`}
               >
                 {isPinned ? <BsPinFill aria-hidden="true" /> : <BsPin aria-hidden="true" />}
                 <span className="text-[12px] font-normal">{isPinned ? t('Dipin') : t('Sematkan')}</span>
@@ -1080,9 +1077,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                   setShowFolderPicker(false)
                   setShowShareModal(false)
                 }}
-                className={`flex h-[38px] w-[38px] items-center justify-center rounded-full border text-[14px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
-                  isDarkMode ? 'border-[#3a3a3e] bg-[#252527]' : 'border-[#e0e0e0] bg-white'
-                }`}
+                className={`flex h-[38px] w-[38px] items-center justify-center rounded-full border text-[14px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${isDarkMode ? 'border-[#3a3a3e] bg-[#252527]' : 'border-[#e0e0e0] bg-white'
+                  }`}
               >
                 <span
                   className="h-4 w-4 rounded-full border border-black/15 shadow-sm"
@@ -1095,9 +1091,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                   data-motion-kind="popover"
                   data-motion-state={colorPickerPresence.isExiting ? 'closing' : 'open'}
                   inert={colorPickerPresence.isExiting}
-                  className={`motion-popover absolute right-0 top-[46px] z-50 flex gap-2 rounded-[18px] border p-2.5 shadow-xl backdrop-blur-md ${
-                    isDarkMode ? 'border-[#3a3a3e] bg-[#252527]/95' : 'border-[#e0e0e0] bg-white/95'
-                  }`}
+                  className={`motion-popover absolute right-0 top-[46px] z-50 flex gap-2 rounded-[18px] border p-2.5 shadow-xl backdrop-blur-md ${isDarkMode ? 'border-[#3a3a3e] bg-[#252527]/95' : 'border-[#e0e0e0] bg-white/95'
+                    }`}
                 >
                   {PALETTE_SWATCHES.map((c) => (
                     <button
@@ -1109,13 +1104,12 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                         setShowColorPicker(false)
                         saveNote({ accentColor: c.hex })
                       }}
-                      className={`h-7 w-7 rounded-full border-2 transition-transform active:scale-95 ${
-                        accentColor.toLowerCase() === c.hex.toLowerCase()
+                      className={`h-7 w-7 rounded-full border-2 transition-transform active:scale-95 ${accentColor.toLowerCase() === c.hex.toLowerCase()
                           ? isDarkMode
                             ? 'border-[#2997ff] scale-110'
                             : 'border-[#0066cc] scale-110'
                           : 'border-transparent'
-                      }`}
+                        }`}
                       style={{ backgroundColor: c.hex }}
                     />
                   ))}
@@ -1138,11 +1132,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                   setShowColorPicker(false)
                   setShowFolderPicker(false)
                 }}
-                className={`flex h-[38px] items-center gap-1.5 rounded-full border px-3 text-[14px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
-                  isDarkMode
+                className={`flex h-[38px] items-center gap-1.5 rounded-full border px-3 text-[14px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${isDarkMode
                     ? 'border-[#3a3a3e] bg-[#252527] text-[#f5f5f7]'
                     : 'border-[#e0e0e0] bg-white text-[#1d1d1f]'
-                }`}
+                  }`}
               >
                 <HiOutlineUsers aria-hidden="true" />
                 {collaboratorList.length > 0 && <span className="text-[12px] font-semibold">{collaboratorList.length}</span>}
@@ -1156,11 +1149,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                 aria-label={isTrashed ? t('Hapus permanen') : t('Buang catatan')}
                 title={isTrashed ? t('Hapus permanen') : t('Buang catatan')}
                 onClick={isTrashed ? handleDeletePermanently : handleToggleTrash}
-                className={`flex h-[38px] w-[38px] items-center justify-center rounded-full border text-[14px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
-                  isDarkMode
+                className={`flex h-[38px] w-[38px] items-center justify-center rounded-full border text-[14px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${isDarkMode
                     ? 'border-[#3a3a3e] bg-[#252527] text-[#b3b3b8] hover:text-[#ff453a]'
                     : 'border-[#e0e0e0] bg-white text-[#7a7a7a] hover:text-[#ff3b30]'
-                }`}
+                  }`}
               >
                 <HiOutlineTrash aria-hidden="true" className="h-4 w-4" />
               </button>
@@ -1172,13 +1164,11 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             type="button"
             onClick={() => handleBackToDashboard()}
             disabled={isSubmitting}
-            className={`flex min-h-[44px] items-center gap-1.5 text-[17px] font-semibold tracking-[-0.374px] transition-all active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] sm:min-h-[36px] sm:rounded-full sm:px-4 sm:text-[14px] sm:font-normal sm:text-white ${
-              isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
-            } ${
-              isDarkMode
+            className={`flex min-h-[44px] items-center gap-1.5 text-[17px] font-semibold tracking-[-0.374px] transition-all active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] sm:min-h-[36px] sm:rounded-full sm:px-4 sm:text-[14px] sm:font-normal sm:text-white ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
+              } ${isDarkMode
                 ? 'text-[#2997ff] sm:bg-[#0066cc] sm:hover:bg-[#0071e3] sm:text-white'
                 : 'text-[#0066cc] sm:bg-[#0066cc] sm:hover:bg-[#0055b3] sm:text-white'
-            }`}
+              }`}
           >
             {isSubmitting && (
               <ImSpinner2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin sm:text-white" />
@@ -1192,11 +1182,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       <main data-motion-content className="mx-auto flex w-full max-w-[980px] flex-1 flex-col px-4 py-6 pb-36 sm:px-8 sm:py-10 sm:pb-36">
         {/* Note Metadata Strip */}
         <div
-          className={`mb-4 flex flex-wrap items-center justify-between gap-2 pb-3 text-[12px] tracking-[-0.12px] ${
-            isDarkMode
+          className={`mb-4 flex flex-wrap items-center justify-between gap-2 pb-3 text-[12px] tracking-[-0.12px] ${isDarkMode
               ? 'border-b border-white/10 text-[#b3b3b8]'
               : 'border-b border-black/5 text-[#7a7a7a]'
-          }`}
+            }`}
         >
           <div className="flex flex-wrap items-center gap-2">
             <span>{createdAt ? formatDate(createdAt) : t('Baru saja')}</span>
@@ -1207,11 +1196,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                 <button
                   type="button"
                   onClick={() => setShowFolderPicker(!showFolderPicker)}
-                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[12px] transition-transform active:scale-95 ${
-                    isDarkMode
+                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[12px] transition-transform active:scale-95 ${isDarkMode
                       ? 'border-[#3a3a3e] bg-[#252527]/80 text-[#f5f5f7]'
                       : 'border-[#e0e0e0] bg-white/70 text-[#1d1d1f]'
-                  }`}
+                    }`}
                 >
                   <HiOutlineFolder aria-hidden="true" />
                   <span>{folders.find((f) => String(f.id) === folderId)?.name || t('Tanpa Folder')}</span>
@@ -1223,9 +1211,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                     data-motion-kind="popover"
                     data-motion-state={folderPickerPresence.isExiting ? 'closing' : 'open'}
                     inert={folderPickerPresence.isExiting}
-                    className={`motion-popover absolute left-0 top-[30px] z-50 min-w-40 rounded-[14px] border p-1.5 shadow-none ${
-                      isDarkMode ? 'border-[#3a3a3e] bg-[#252527]' : 'border-[#e0e0e0] bg-white'
-                    }`}
+                    className={`motion-popover absolute left-0 top-[30px] z-50 min-w-40 rounded-[14px] border p-1.5 shadow-none ${isDarkMode ? 'border-[#3a3a3e] bg-[#252527]' : 'border-[#e0e0e0] bg-white'
+                      }`}
                   >
                     <button
                       type="button"
@@ -1234,15 +1221,14 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                         setShowFolderPicker(false)
                         saveNote({ folderId: '' })
                       }}
-                      className={`block w-full rounded-[8px] px-3 py-1.5 text-left text-[12px] transition-colors ${
-                        folderId === ''
+                      className={`block w-full rounded-[8px] px-3 py-1.5 text-left text-[12px] transition-colors ${folderId === ''
                           ? isDarkMode
                             ? 'bg-[#303033] font-semibold text-[#2997ff]'
                             : 'bg-[#f5f5f7] font-semibold text-[#0066cc]'
                           : isDarkMode
-                          ? 'text-[#f5f5f7] hover:bg-[#303033]'
-                          : 'text-[#1d1d1f] hover:bg-[#fafafc]'
-                      }`}
+                            ? 'text-[#f5f5f7] hover:bg-[#303033]'
+                            : 'text-[#1d1d1f] hover:bg-[#fafafc]'
+                        }`}
                     >
                       {t("Tanpa Folder")}
                     </button>
@@ -1256,15 +1242,14 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                           setShowFolderPicker(false)
                           saveNote({ folderId: val })
                         }}
-                        className={`block w-full truncate rounded-[8px] px-3 py-1.5 text-left text-[12px] transition-colors ${
-                          folderId === String(folder.id)
+                        className={`block w-full truncate rounded-[8px] px-3 py-1.5 text-left text-[12px] transition-colors ${folderId === String(folder.id)
                             ? isDarkMode
                               ? 'bg-[#303033] font-semibold text-[#2997ff]'
                               : 'bg-[#f5f5f7] font-semibold text-[#0066cc]'
                             : isDarkMode
-                            ? 'text-[#f5f5f7] hover:bg-[#303033]'
-                            : 'text-[#1d1d1f] hover:bg-[#fafafc]'
-                        }`}
+                              ? 'text-[#f5f5f7] hover:bg-[#303033]'
+                              : 'text-[#1d1d1f] hover:bg-[#fafafc]'
+                          }`}
                       >
                         {folder.name}
                       </button>
@@ -1286,13 +1271,16 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           id="note-title-input"
           type="text"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            setTitle(e.target.value)
+            setIsDirty(true)
+            setSaveStatus('idle')
+          }}
           placeholder={t("Judul Catatan")}
-          className={`w-full bg-transparent text-[28px] font-semibold tracking-[-0.374px] leading-[1.14] outline-none sm:text-[34px] sm:tracking-[-0.374px] ${
-            isDarkMode
+          className={`w-full bg-transparent text-[28px] font-semibold tracking-[-0.374px] leading-[1.14] outline-none sm:text-[34px] sm:tracking-[-0.374px] ${isDarkMode
               ? 'text-[#f5f5f7] placeholder-[#b3b3b8]/40'
               : 'text-[#1d1d1f] placeholder-[#7a7a7a]/40'
-          }`}
+            }`}
         />
 
         {/* Note Body Textarea */}
@@ -1300,13 +1288,16 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           id="note-content-input"
           ref={contentTextareaRef}
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={(e) => {
+            setContent(e.target.value)
+            setIsDirty(true)
+            setSaveStatus('idle')
+          }}
           placeholder={t("Tulis catatanmu di sini...")}
-          className={`mt-4 w-full flex-1 resize-none bg-transparent pb-36 md:pb-12 text-[17px] font-normal leading-[1.47] tracking-[-0.374px] outline-none ${
-            isDarkMode
+          className={`mt-4 w-full flex-1 resize-none bg-transparent pb-36 md:pb-12 text-[17px] font-normal leading-[1.47] tracking-[-0.374px] outline-none ${isDarkMode
               ? 'text-[#f5f5f7] placeholder-[#b3b3b8]/40'
               : 'text-[#1d1d1f] placeholder-[#7a7a7a]/40'
-          }`}
+            }`}
         />
       </main>
 
@@ -1318,13 +1309,11 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         style={{
           bottom: 'max(2.25rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))',
         }}
-        className={`motion-dock fixed left-1/2 -translate-x-1/2 z-40 md:hidden ${
-          sharePresence.isPresent && !colorPickerPresence.isExiting ? 'hidden' : 'flex'
-        } items-center gap-1 sm:gap-2 px-3 py-1.5 rounded-full backdrop-blur-2xl saturate-[190%] shadow-[0_8px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all pointer-events-auto ${
-          isDarkMode
+        className={`motion-dock fixed left-1/2 -translate-x-1/2 z-40 md:hidden ${sharePresence.isPresent && !colorPickerPresence.isExiting ? 'hidden' : 'flex'
+          } items-center gap-1 sm:gap-2 px-3 py-1.5 rounded-full backdrop-blur-2xl saturate-[190%] shadow-[0_8px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all pointer-events-auto ${isDarkMode
             ? 'bg-[#252527]/80 border border-white/10 ring-1 ring-white/[0.06]'
             : 'bg-white/85 border border-white/70 ring-1 ring-black/[0.04]'
-        }`}
+          }`}
       >
         {/* Pin Button */}
         {isOwner && !isNew && (
@@ -1333,15 +1322,14 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             onClick={handleTogglePin}
             aria-label={isPinned ? t('Lepas Pin') : t('Pin Catatan')}
             title={isPinned ? t('Lepas Pin') : t('Pin Catatan')}
-            className={`flex h-[36px] items-center gap-1 rounded-full px-3 text-[13px] transition-transform active:scale-95 ${
-              isPinned
+            className={`flex h-[36px] items-center gap-1 rounded-full px-3 text-[13px] transition-transform active:scale-95 ${isPinned
                 ? isDarkMode
                   ? 'bg-[#2997ff] text-white shadow-sm'
                   : 'bg-[#0066cc] text-white shadow-sm'
                 : isDarkMode
-                ? 'text-[#f5f5f7] hover:bg-white/10'
-                : 'text-[#1d1d1f] hover:bg-black/5'
-            }`}
+                  ? 'text-[#f5f5f7] hover:bg-white/10'
+                  : 'text-[#1d1d1f] hover:bg-black/5'
+              }`}
           >
             {isPinned ? <BsPinFill aria-hidden="true" /> : <BsPin aria-hidden="true" />}
             <span className="font-normal">{isPinned ? t('Dipin') : t('Sematkan')}</span>
@@ -1359,9 +1347,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
               setShowFolderPicker(false)
               setShowShareModal(false)
             }}
-            className={`flex h-[36px] w-[36px] items-center justify-center rounded-full transition-transform active:scale-95 ${
-              isDarkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'
-            }`}
+            className={`flex h-[36px] w-[36px] items-center justify-center rounded-full transition-transform active:scale-95 ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'
+              }`}
           >
             <span
               className="h-4 w-4 rounded-full border border-black/15 shadow-sm"
@@ -1374,11 +1361,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
               data-motion-kind="popover"
               data-motion-state={colorPickerPresence.isExiting ? 'closing' : 'open'}
               inert={colorPickerPresence.isExiting}
-              className={`motion-popover absolute bottom-[calc(100%+12px)] left-1/2 -translate-x-1/2 z-50 flex gap-2 rounded-full border p-2 shadow-2xl backdrop-blur-2xl transition-all ${
-                isDarkMode
+              className={`motion-popover absolute bottom-[calc(100%+12px)] left-1/2 -translate-x-1/2 z-50 flex gap-2 rounded-full border p-2 shadow-2xl backdrop-blur-2xl transition-all ${isDarkMode
                   ? 'border-white/15 bg-[#252527]/95 shadow-[0_12px_36px_rgba(0,0,0,0.6)]'
                   : 'border-white/80 bg-white/95 shadow-[0_12px_36px_rgba(0,0,0,0.2)]'
-              }`}
+                }`}
             >
               {PALETTE_SWATCHES.map((c) => (
                 <button
@@ -1390,13 +1376,12 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                     setShowColorPicker(false)
                     saveNote({ accentColor: c.hex })
                   }}
-                  className={`h-6 w-6 rounded-full border-2 transition-transform active:scale-95 ${
-                    accentColor.toLowerCase() === c.hex.toLowerCase()
+                  className={`h-6 w-6 rounded-full border-2 transition-transform active:scale-95 ${accentColor.toLowerCase() === c.hex.toLowerCase()
                       ? isDarkMode
                         ? 'border-[#2997ff] scale-110'
                         : 'border-[#0066cc] scale-110'
                       : 'border-transparent'
-                  }`}
+                    }`}
                   style={{ backgroundColor: c.hex }}
                 />
               ))}
@@ -1419,16 +1404,14 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
               setShowColorPicker(false)
               setShowFolderPicker(false)
             }}
-            className={`flex h-[36px] items-center gap-1.5 rounded-full px-2.5 text-[13px] transition-transform active:scale-95 ${
-              isDarkMode ? 'text-[#f5f5f7] hover:bg-white/10' : 'text-[#1d1d1f] hover:bg-black/5'
-            }`}
+            className={`flex h-[36px] items-center gap-1.5 rounded-full px-2.5 text-[13px] transition-transform active:scale-95 ${isDarkMode ? 'text-[#f5f5f7] hover:bg-white/10' : 'text-[#1d1d1f] hover:bg-black/5'
+              }`}
           >
             <HiOutlineUsers aria-hidden="true" />
             {collaboratorList.length > 0 && (
               <span
-                className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white ${
-                  isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
-                }`}
+                className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white ${isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
+                  }`}
               >
                 {collaboratorList.length}
               </span>
@@ -1443,11 +1426,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             aria-label={isTrashed ? t('Hapus permanen') : t('Buang catatan')}
             title={isTrashed ? t('Hapus permanen') : t('Buang catatan')}
             onClick={isTrashed ? handleDeletePermanently : handleToggleTrash}
-            className={`flex h-[36px] w-[36px] items-center justify-center rounded-full transition-transform active:scale-95 ${
-              isDarkMode
+            className={`flex h-[36px] w-[36px] items-center justify-center rounded-full transition-transform active:scale-95 ${isDarkMode
                 ? 'text-[#b3b3b8] hover:text-[#ff453a] hover:bg-white/10'
                 : 'text-[#7a7a7a] hover:text-[#ff3b30] hover:bg-black/5'
-            }`}
+              }`}
           >
             <HiOutlineTrash aria-hidden="true" className="h-4 w-4" />
           </button>
@@ -1475,11 +1457,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             aria-modal="true"
             aria-labelledby="collab-modal-title"
             data-motion-kind="sheet"
-            className={`animate-modal-enter relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-[28px] border sm:rounded-[20px] sm:max-w-[480px] backdrop-blur-xl transition-all duration-200 ${
-              isDarkMode
+            className={`animate-modal-enter relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-[28px] border sm:rounded-[20px] sm:max-w-[480px] backdrop-blur-xl transition-all duration-200 ${isDarkMode
                 ? 'border-[#3a3a3e] bg-[#252527]/95 text-[#f5f5f7] shadow-[0_20px_60px_rgba(0,0,0,0.6)]'
                 : 'border-[#e0e0e0] bg-white/95 text-[#1d1d1f] shadow-[0_20px_60px_rgba(0,0,0,0.15)]'
-            }`}
+              }`}
           >
             {/* Mobile Drag Indicator Handle */}
             <div className="pt-3 pb-1 sm:hidden flex justify-center">
@@ -1488,9 +1469,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
             {/* Modal Header */}
             <div
-              className={`flex items-center justify-between px-6 pt-2 pb-3.5 border-b ${
-                isDarkMode ? 'border-[#3a3a3e]' : 'border-[#f0f0f0]'
-              }`}
+              className={`flex items-center justify-between px-6 pt-2 pb-3.5 border-b ${isDarkMode ? 'border-[#3a3a3e]' : 'border-[#f0f0f0]'
+                }`}
             >
               <div>
                 <h3
@@ -1508,9 +1488,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
               <button
                 type="button"
                 onClick={() => setShowShareModal(false)}
-                className={`min-h-[44px] min-w-[44px] flex items-center justify-end text-[17px] font-normal tracking-[-0.374px] active:scale-95 transition-transform ${
-                  isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'
-                }`}
+                className={`min-h-[44px] min-w-[44px] flex items-center justify-end text-[17px] font-normal tracking-[-0.374px] active:scale-95 transition-transform ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'
+                  }`}
               >
                 {t("Tutup")}
               </button>
@@ -1531,11 +1510,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
                 {/* Participant List Card */}
                 <div
-                  className={`rounded-[16px] border divide-y overflow-hidden ${
-                    isDarkMode
+                  className={`rounded-[16px] border divide-y overflow-hidden ${isDarkMode
                       ? 'border-[#3a3a3e] bg-[#1d1d1f] divide-[#3a3a3e]/70'
                       : 'border-[#e0e0e0] bg-[#f5f5f7] divide-[#e0e0e0]/70'
-                  }`}
+                    }`}
                 >
                   {/* Pemilik (Owner) */}
                   {ownerPerson && (
@@ -1575,11 +1553,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                         </div>
                       </div>
                       <span
-                        className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-[-0.1px] ${
-                          isDarkMode
+                        className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-[-0.1px] ${isDarkMode
                             ? 'bg-white/10 text-[#f5f5f7]'
                             : 'bg-black/5 text-[#1d1d1f]'
-                        }`}
+                          }`}
                       >
                         {t("Pemilik")}
                       </span>
@@ -1606,11 +1583,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                               />
                             ) : (
                               <div
-                                className={`flex h-10 w-10 items-center justify-center rounded-full text-[15px] font-semibold border ${
-                                  isDarkMode
+                                className={`flex h-10 w-10 items-center justify-center rounded-full text-[15px] font-semibold border ${isDarkMode
                                     ? 'bg-[#162838] text-[#2997ff] border-[#23435c]'
                                     : 'bg-[#e8f2ff] text-[#0066cc] border-[#bae6fd]'
-                                }`}
+                                  }`}
                               >
                                 {(m.full_name || t('Kolaborator')).slice(0, 1).toUpperCase()}
                               </div>
@@ -1647,11 +1623,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                 {/* Empty Collaborator Note */}
                 {collaboratorList.length === 0 && (
                   <div
-                    className={`mt-3 rounded-[16px] border border-dashed p-4 text-center ${
-                      isDarkMode
+                    className={`mt-3 rounded-[16px] border border-dashed p-4 text-center ${isDarkMode
                         ? 'border-[#3a3a3e] bg-[#1d1d1f]/60'
                         : 'border-[#e0e0e0] bg-[#f5f5f7]/60'
-                    }`}
+                      }`}
                   >
                     <HiOutlineUsers aria-hidden="true" className="inline-block text-2xl" />
                     <p className="mt-1.5 text-[14px] font-semibold tracking-[-0.2px]">
@@ -1689,20 +1664,18 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                           onInvalid={(e) => e.currentTarget.setCustomValidity(t(e.currentTarget.validity.valueMissing ? 'Email wajib diisi.' : 'Masukkan alamat email yang valid.'))}
                           onInput={(e) => e.currentTarget.setCustomValidity('')}
                           placeholder={t("Masukkan email rekan (nama@email.com)")}
-                          className={`h-11 w-full rounded-full border pl-11 pr-4 text-[15px] outline-none transition-colors focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
-                            isDarkMode
+                          className={`h-11 w-full rounded-full border pl-11 pr-4 text-[15px] outline-none transition-colors focus-visible:outline-2 focus-visible:outline-[#0071e3] ${isDarkMode
                               ? 'border-[#3a3a3e] bg-[#1d1d1f] text-[#f5f5f7] placeholder-[#b3b3b8]/50'
                               : 'border-[#e0e0e0] bg-white text-[#1d1d1f] placeholder-[#7a7a7a]/50'
-                          }`}
+                            }`}
                         />
                       </div>
 
                       <button
                         type="submit"
                         disabled={inviteLoading || !inviteEmail.trim()}
-                        className={`w-full min-h-11 rounded-full text-[15px] font-normal text-white transition-transform active:scale-95 disabled:opacity-40 flex items-center justify-center gap-2 ${
-                          isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
-                        }`}
+                        className={`w-full min-h-11 rounded-full text-[15px] font-normal text-white transition-transform active:scale-95 disabled:opacity-40 flex items-center justify-center gap-2 ${isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
+                          }`}
                       >
                         {inviteLoading ? (
                           <>
@@ -1716,11 +1689,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                     </form>
                   ) : (
                     <div
-                      className={`rounded-[16px] border p-4 text-center ${
-                        isDarkMode
+                      className={`rounded-[16px] border p-4 text-center ${isDarkMode
                           ? 'border-[#4d3f1a] bg-[#2d2616]'
                           : 'border-[#fde68a] bg-[#fff8e6]'
-                      }`}
+                        }`}
                     >
                       <HiStar aria-hidden="true" className="inline-block text-xl" />
                       <p className="mt-1 text-[14px] font-semibold">
@@ -1732,9 +1704,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                       <button
                         type="button"
                         onClick={() => router.push('/')}
-                        className={`mt-3 inline-flex min-h-[36px] items-center justify-center rounded-full px-4 text-[13px] font-normal text-white active:scale-95 transition-transform ${
-                          isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
-                        }`}
+                        className={`mt-3 inline-flex min-h-[36px] items-center justify-center rounded-full px-4 text-[13px] font-normal text-white active:scale-95 transition-transform ${isDarkMode ? 'bg-[#2997ff]' : 'bg-[#0066cc]'
+                          }`}
                       >
                         {t("Lihat Paket Premium")}
                       </button>
@@ -1743,9 +1714,8 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
                   {inviteMsg && (
                     <p
-                      className={`mt-2.5 text-center text-[13px] font-normal ${
-                        inviteMsg.isError ? 'text-[#ff453a]' : 'text-[#34c759]'
-                      }`}
+                      className={`mt-2.5 text-center text-[13px] font-normal ${inviteMsg.isError ? 'text-[#ff453a]' : 'text-[#34c759]'
+                        }`}
                     >
                       {inviteMsg.raw ? inviteMsg.source : t(inviteMsg.source, inviteMsg.values)}
                     </p>

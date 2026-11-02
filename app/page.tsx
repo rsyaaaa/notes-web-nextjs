@@ -162,7 +162,7 @@ function HomeContent() {
     note?: Note
     count?: number
   } | null>(null)
-  const [openingNoteId, setOpeningNoteId] = useState<number | 'new' | null>(null)
+  const [isEditorDirty, setIsEditorDirty] = useState(false)
   const isPremium = profile?.plan === 'premium'
     && Boolean(profile.premium_expires_at)
     && new Date(profile.premium_expires_at as string).getTime() > currentTime
@@ -484,7 +484,7 @@ function HomeContent() {
         setIsProfileMenuOpen(false)
         setIsPageListOpen(false)
         setIsPageListClosing(false)
-        setOpeningNoteId(null)
+        setIsEditorDirty(false)
         setIsPremiumOfferOpen(false)
         setPremiumDetailOpen(false)
         setPremiumSuccessExpiry(null)
@@ -782,6 +782,7 @@ function HomeContent() {
       if (editingNoteId !== null && deletedNoteIdsRef.current.has(editingNoteId)) return false
       if (editingNoteId === null) setEditingNoteId(data.id)
       setLastSavedDraft(draft)
+      setIsEditorDirty(false)
       setSaveStatus('saved')
       await fetchNotes(user.id)
       return isCurrent()
@@ -806,8 +807,8 @@ function HomeContent() {
     setNoteMembers([])
     setOnlineMembers([])
     const draft = {
-      title: note.title,
-      content: note.content,
+      title: note.title || '',
+      content: note.content || '',
       accentColor: note.accent_color || '#ffffff',
       folderId: note.folder_id ? String(note.folder_id) : '',
     }
@@ -818,6 +819,7 @@ function HomeContent() {
     setSelectedFolderId(draft.folderId)
     setLastSavedDraft(draft)
     setSaveStatus('idle')
+    if (typeof setIsEditorDirty === 'function') setIsEditorDirty(false)
     setIsFormOpen(true)
   }
 
@@ -833,6 +835,7 @@ function HomeContent() {
     setSelectedFolderId(emptyDraft.folderId)
     setLastSavedDraft(emptyDraft)
     setSaveStatus('idle')
+    if (typeof setIsEditorDirty === 'function') setIsEditorDirty(false)
     setIsFormOpen(true)
   }
 
@@ -840,6 +843,7 @@ function HomeContent() {
     if (!isFormOpen || isFormClosing) return
     setNoteMembers([])
     setOnlineMembers([])
+    setIsEditorDirty(false)
     setIsFormClosing(true)
     const scope = accountScopeRef.current
     const editorVersion = ++editorVersionRef.current
@@ -852,9 +856,7 @@ function HomeContent() {
 
   const handleNoteCardClick = (note: Note) => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      setOpeningNoteId(note.id)
       router.push(`/notes/${note.id}`)
-      window.setTimeout(() => setOpeningNoteId(null), 600)
     } else {
       handleEditClick(note)
     }
@@ -862,42 +864,16 @@ function HomeContent() {
 
   const handleNewNoteClick = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      setOpeningNoteId('new')
       router.push(getNewNoteHref(folderFilter, folders))
-      window.setTimeout(() => setOpeningNoteId(null), 600)
     } else {
       if (isFormOpen) closeNoteForm()
       else openNewNote()
     }
   }
 
-  // Clear opening loader whenever route returns to '/'
   useEffect(() => {
-    if (pathname === '/') {
-      const frame = window.requestAnimationFrame(() => {
-        setOpeningNoteId(null)
-      })
-      return () => window.cancelAnimationFrame(frame)
-    }
-  }, [pathname])
-
-  // Clear opening loader on browser back/forward, tab reactivation, or page visibility
-  useEffect(() => {
-    const handleReset = () => setOpeningNoteId(null)
-    window.addEventListener('popstate', handleReset)
-    window.addEventListener('pageshow', handleReset)
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        handleReset()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => {
-      window.removeEventListener('popstate', handleReset)
-      window.removeEventListener('pageshow', handleReset)
-      document.removeEventListener('visibilitychange', handleVisibility)
-    }
-  }, [])
+    router.prefetch('/notes/new')
+  }, [router])
 
   // Auto-refresh notes & folders when user navigates back to dashboard '/'
   useEffect(() => {
@@ -962,7 +938,7 @@ function HomeContent() {
   }, [accentColor, content, lastSavedDraft, selectedFolderId, title])
 
   useEffect(() => {
-    if (!isFormOpen || !user) return
+    if (!isFormOpen || !user || !isEditorDirty) return
 
     const draft = { title, content, accentColor, folderId: selectedFolderId }
     if (JSON.stringify(draft) === JSON.stringify(lastSavedDraft)) return
@@ -975,7 +951,7 @@ function HomeContent() {
     }, 5000)
 
     return () => window.clearTimeout(timeout)
-  }, [accentColor, content, editingNoteId, isFormOpen, lastSavedDraft, saveEditorDraft, selectedFolderId, title, user])
+  }, [accentColor, content, editingNoteId, isEditorDirty, isFormOpen, lastSavedDraft, saveEditorDraft, selectedFolderId, title, user])
 
   useEffect(() => {
     if (!isFolderMenuOpen) return
@@ -1402,22 +1378,12 @@ function HomeContent() {
     }
   }
 
-  if (loading || openingNoteId !== null) {
+  if (loading) {
     return (
       <AppleNoteLoader
         isDark={isDarkMode}
-        title={
-          openingNoteId === 'new'
-            ? t('Membuat Catatan...')
-            : openingNoteId !== null
-            ? t('Membuka Catatan...')
-            : t('Memuat Notes...')
-        }
-        subtitle={
-          openingNoteId !== null
-            ? t('Menyiapkan ruang tenang untuk idemu')
-            : t('Menyiapkan catatanmu')
-        }
+        title={t('Memuat Notes...')}
+        subtitle={t('Menyiapkan catatanmu')}
       />
     )
   }
@@ -2447,6 +2413,7 @@ function HomeContent() {
                       value={title}
                       onChange={(event) => {
                         setTitle(event.target.value)
+                        setIsEditorDirty(true)
                         setSaveStatus('idle')
                       }}
                       className="w-full min-w-0 bg-transparent text-[21px] font-semibold leading-[1.2] text-[#1d1d1f] outline-none placeholder:text-[#7a7a7a] focus-visible:ring-2 focus-visible:ring-[#0071e3]"
@@ -2472,6 +2439,7 @@ function HomeContent() {
                   value={content}
                   onChange={(e) => {
                     setContent(e.target.value)
+                    setIsEditorDirty(true)
                     setSaveStatus('idle')
                   }}
                   rows={10}
@@ -2530,6 +2498,7 @@ function HomeContent() {
                         aria-pressed={accentColor === color.value}
                         onClick={() => {
                           setAccentColor(color.value)
+                          setIsEditorDirty(true)
                           setSaveStatus('idle')
                         }}
                         style={{ backgroundColor: getAccentSurface(color.value) }}
@@ -2617,6 +2586,11 @@ function HomeContent() {
                         role="button"
                         tabIndex={0}
                         aria-label={t('Buka catatan {name}', { name: note.title || t('Tanpa Judul') })}
+                        onPointerDown={() => {
+                          if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                            router.prefetch(`/notes/${note.id}`)
+                          }
+                        }}
                         onClick={() => handleNoteCardClick(note)}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
@@ -2985,9 +2959,10 @@ function HomeContent() {
                 aria-selected={selectedFolderId === folder.id}
                 onClick={() => {
                   setSelectedFolderId(folder.id)
+                  setIsEditorDirty(true)
                   setSaveStatus('idle')
                   setIsFolderMenuOpen(false)
-        setIsFilterFolderOpen(false)
+                  setIsFilterFolderOpen(false)
                 }}
                 className={`min-h-10 w-full rounded-full px-3 text-left text-[14px] transition-colors hover:bg-[#f5f5f7] ${selectedFolderId === folder.id ? 'text-[#0066cc]' : ''}`}
               >
