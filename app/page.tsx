@@ -173,6 +173,8 @@ function HomeContent() {
   const premiumDetailPresence = useAnimatedPresence(premiumDetailOpen && isPremium)
   const premiumSuccessPresence = useAnimatedPresence(premiumSuccessExpiry)
   const confirmationPresence = useAnimatedPresence(confirmation)
+  const [folderToDelete, setFolderToDelete] = useState<{ id: number; name: string } | null>(null)
+  const folderDeletePresence = useAnimatedPresence(folderToDelete)
   const profileMenuPresence = useAnimatedPresence(isProfileMenuOpen)
   const folderMenuPresence = useAnimatedPresence(isFolderMenuOpen)
 
@@ -499,6 +501,7 @@ function HomeContent() {
         setIsActivatingPremium(false)
         setPinAnimation(null)
         setConfirmation(null)
+        if (typeof setFolderToDelete === 'function') setFolderToDelete(null)
         setFolderFilter('all')
         setSearchQuery('')
         setSortOrder('newest')
@@ -695,6 +698,52 @@ function HomeContent() {
       setFolderName('')
       setIsCreatingFolder(false)
       await fetchFolders(user.id)
+    }
+  }
+
+  const handleDeleteFolder = async (folderId: number, deleteContents: boolean) => {
+    const scope = accountScopeRef.current
+    if (!user || scope.userId !== user.id) return
+    setFolderToDelete(null)
+
+    try {
+      if (deleteContents) {
+        const { error: notesError } = await supabase
+          .from('notes')
+          .update({ is_trashed: true, folder_id: null, updated_at: new Date().toISOString() })
+          .eq('folder_id', folderId)
+          .eq('user_id', user.id)
+        if (notesError) {
+          setPremiumMessage(t('Gagal menghapus isi folder: {error}', { error: notesError.message }))
+          return
+        }
+      } else {
+        await supabase
+          .from('notes')
+          .update({ folder_id: null, updated_at: new Date().toISOString() })
+          .eq('folder_id', folderId)
+          .eq('user_id', user.id)
+      }
+
+      const { error: folderError } = await supabase
+        .from('note_folders')
+        .delete()
+        .eq('id', folderId)
+        .eq('user_id', user.id)
+
+      if (scope !== accountScopeRef.current) return
+      if (folderError) {
+        setPremiumMessage(t('Gagal menghapus folder: {error}', { error: folderError.message }))
+        return
+      }
+
+      if (folderFilter === String(folderId)) setFolderFilter('all')
+      if (selectedFolderId === String(folderId)) setSelectedFolderId('')
+
+      await Promise.all([fetchFolders(user.id), fetchNotes(user.id)])
+    } catch (err: unknown) {
+      console.error('Error deleting folder:', err)
+      setPremiumMessage(t('Terjadi kesalahan saat menghapus folder.'))
     }
   }
 
@@ -1085,7 +1134,7 @@ function HomeContent() {
   }, [editingNoteId, isFormOpen, t])
 
   useEffect(() => {
-    if (!isFormOpen && !confirmation && !isPremiumOfferOpen && !premiumDetailOpen && !isSettingsOpen && !isApplicationSettingsOpen && !isRoleGodAuthOpen) return
+    if (!isFormOpen && !confirmation && !folderToDelete && !isPremiumOfferOpen && !premiumDetailOpen && !isSettingsOpen && !isApplicationSettingsOpen && !isRoleGodAuthOpen) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         if (deleteAccountPresence.isPresent || event.defaultPrevented) return
@@ -1093,6 +1142,7 @@ function HomeContent() {
         setIsFolderMenuOpen(false)
         setIsFilterFolderOpen(false)
         setConfirmation(null)
+        if (typeof setFolderToDelete === 'function') setFolderToDelete(null)
         setIsPremiumOfferOpen(false)
         setPremiumDetailOpen(false)
         setIsSettingsOpen(false)
@@ -1102,7 +1152,7 @@ function HomeContent() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [closeNoteForm, confirmation, isFormOpen, isFormClosing, isPremiumOfferOpen, premiumDetailOpen, isSettingsOpen, isApplicationSettingsOpen, isRoleGodAuthOpen, deleteAccountPresence.isPresent])
+  }, [closeNoteForm, confirmation, folderToDelete, isFormOpen, isFormClosing, isPremiumOfferOpen, premiumDetailOpen, isSettingsOpen, isApplicationSettingsOpen, isRoleGodAuthOpen, deleteAccountPresence.isPresent])
 
   useEffect(() => {
     const expiresAt = profile?.premium_expires_at
@@ -2250,26 +2300,52 @@ function HomeContent() {
                         <>
                           <div className={`my-1 h-px ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
                           <div className="max-h-48 overflow-y-auto space-y-0.5">
-                            {folders.map((folder) => (
-                              <button
-                                key={folder.id}
-                                type="button"
-                                role="option"
-                                aria-selected={folderFilter === String(folder.id)}
-                                onClick={() => {
-                                  setFolderFilter(String(folder.id))
-                                  setIsFilterFolderOpen(false)
-                                }}
-                                className={`flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[13px] transition-colors active:scale-[0.98] ${
-                                  folderFilter === String(folder.id)
-                                    ? isDarkMode ? 'bg-white/15 text-white font-medium' : 'bg-black/5 text-[#1d1d1f] font-medium'
-                                    : isDarkMode ? 'text-[#f5f5f7] hover:bg-white/10' : 'text-[#1d1d1f] hover:bg-black/5'
-                                }`}
-                              >
-                                <span className="truncate">{folder.name}</span>
-                                {folderFilter === String(folder.id) && <HiOutlineCheck className="h-4 w-4 text-[#0066cc]" aria-hidden="true" />}
-                              </button>
-                            ))}
+                            {folders.map((folder) => {
+                              const isSelected = folderFilter === String(folder.id)
+                              return (
+                                <div
+                                  key={folder.id}
+                                  className={`group/folder flex w-full items-center justify-between rounded-[8px] px-2 py-1 transition-colors ${
+                                    isSelected
+                                      ? isDarkMode ? 'bg-white/15 text-white font-medium' : 'bg-black/5 text-[#1d1d1f] font-medium'
+                                      : isDarkMode ? 'text-[#f5f5f7] hover:bg-white/10' : 'text-[#1d1d1f] hover:bg-black/5'
+                                  }`}
+                                >
+                                  <button
+                                    type="button"
+                                    role="option"
+                                    aria-selected={isSelected}
+                                    onClick={() => {
+                                      setFolderFilter(String(folder.id))
+                                      setIsFilterFolderOpen(false)
+                                    }}
+                                    className="flex min-w-0 flex-1 items-center justify-between gap-1.5 py-1 text-left text-[13px] active:scale-[0.98]"
+                                  >
+                                    <span className="truncate">{folder.name}</span>
+                                    {isSelected && <HiOutlineCheck className="h-4 w-4 shrink-0 text-[#0066cc]" aria-hidden="true" />}
+                                  </button>
+                                  {isPremium && (
+                                    <button
+                                      type="button"
+                                      aria-label={t('Hapus folder {name}', { name: folder.name })}
+                                      title={t('Hapus folder')}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setIsFilterFolderOpen(false)
+                                        setFolderToDelete(folder)
+                                      }}
+                                      className={`ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] transition-all active:scale-90 ${
+                                        isDarkMode
+                                          ? 'text-[#86868b] hover:bg-white/10 hover:text-[#ff453a]'
+                                          : 'text-[#86868b] hover:bg-black/5 hover:text-[#ff3b30]'
+                                      }`}
+                                    >
+                                      <HiOutlineTrash className="h-3.5 w-3.5" aria-hidden="true" />
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })}
                           </div>
                         </>
                       )}
@@ -3042,6 +3118,110 @@ function HomeContent() {
                       : t('Hapus Permanen')}
                 </button>
               </div>
+            </section>
+          </div>,
+          document.body
+        )}
+
+        {isMounted && folderDeletePresence.isPresent && folderDeletePresence.value && createPortal(
+          <div
+            data-motion-state={folderDeletePresence.isExiting ? 'closing' : 'open'}
+            className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setFolderToDelete(null)
+            }}
+          >
+            <section
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="folder-delete-title"
+              aria-describedby="folder-delete-description"
+              className={`w-full max-w-[420px] rounded-[18px] border p-6 animate-modal-enter sm:p-7 shadow-2xl backdrop-blur-2xl ${
+                isDarkMode ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7]' : 'border-[#e0e0e0] bg-white/95 text-[#1d1d1f]'
+              }`}
+            >
+              <div
+                className={`mb-5 flex h-11 w-11 items-center justify-center rounded-full text-[21px] font-semibold ${
+                  isDarkMode ? 'bg-[#ff453a]/15 text-[#ff453a]' : 'bg-[#ff3b30]/10 text-[#ff3b30]'
+                }`}
+                aria-hidden="true"
+              >
+                <HiOutlineTrash aria-hidden="true" />
+              </div>
+              <h2
+                id="folder-delete-title"
+                className={`text-[20px] font-semibold leading-[1.25] tracking-[-0.2px] ${
+                  isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
+                }`}
+              >
+                {t('Hapus Folder “{name}”?', { name: folderDeletePresence.value.name })}
+              </h2>
+              {(() => {
+                const folderId = folderDeletePresence.value.id
+                const notesInFolder = notes.filter((n) => !n.is_trashed && n.folder_id === folderId).length
+                return (
+                  <>
+                    <p
+                      id="folder-delete-description"
+                      className={`mt-3 text-[15px] leading-[1.47] ${
+                        isDarkMode ? 'text-[#86868b]' : 'text-[#515154]'
+                      }`}
+                    >
+                      {notesInFolder > 0
+                        ? t(
+                            'Folder ini berisi {count} catatan. Pilih apakah Anda ingin menghapus folder beserta seluruh catatan di dalamnya, atau hanya menghapus foldernya saja.',
+                            { count: notesInFolder }
+                          )
+                        : t('Folder ini kosong. Apakah Anda yakin ingin menghapus folder ini?')}
+                    </p>
+                    <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2.5">
+                      <button
+                        type="button"
+                        autoFocus
+                        onClick={() => setFolderToDelete(null)}
+                        className={`min-h-10 rounded-full px-4 text-[13px] font-medium transition-colors active:scale-95 ${
+                          isDarkMode ? 'text-[#86868b] hover:bg-white/10' : 'text-[#6e6e73] hover:bg-black/5'
+                        }`}
+                      >
+                        {t('Batal')}
+                      </button>
+                      {notesInFolder > 0 ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFolder(folderId, false)}
+                            disabled={folderDeletePresence.isExiting}
+                            className={`min-h-10 rounded-full border px-4 text-[13px] font-medium transition-all active:scale-95 ${
+                              isDarkMode
+                                ? 'border-white/15 bg-white/5 text-[#f5f5f7] hover:bg-white/10'
+                                : 'border-black/10 bg-black/5 text-[#1d1d1f] hover:bg-black/10'
+                            }`}
+                          >
+                            {t('Hapus Foldernya Saja')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFolder(folderId, true)}
+                            disabled={folderDeletePresence.isExiting}
+                            className="min-h-10 rounded-full bg-[#ff3b30] hover:bg-[#d70015] px-4 text-[13px] font-medium text-white shadow-sm transition-all active:scale-95"
+                          >
+                            {t('Hapus Folder & Isinya')}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteFolder(folderId, false)}
+                          disabled={folderDeletePresence.isExiting}
+                          className="min-h-10 rounded-full bg-[#ff3b30] hover:bg-[#d70015] px-4 text-[13px] font-medium text-white shadow-sm transition-all active:scale-95"
+                        >
+                          {t('Hapus Folder')}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )
+              })()}
             </section>
           </div>,
           document.body
