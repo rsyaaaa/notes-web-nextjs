@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { FcGoogle } from 'react-icons/fc'
-import { HiStar, HiOutlineChevronDown, HiOutlineDocumentText, HiOutlineTrash, HiOutlineCog, HiOutlineMoon, HiOutlineSun, HiOutlineCheck, HiOutlineX, HiOutlinePlus, HiOutlineLogout, HiOutlineMenuAlt2, HiOutlineEye, HiOutlineEyeOff, HiOutlineSearch } from 'react-icons/hi'
+import { HiStar, HiOutlineChevronDown, HiOutlineDocumentText, HiOutlineTrash, HiOutlineCog, HiOutlineMoon, HiOutlineSun, HiOutlineCheck, HiOutlineX, HiOutlinePlus, HiOutlineLogout, HiOutlineMenuAlt2, HiOutlineEye, HiOutlineEyeOff, HiOutlineSearch, HiOutlineFolder } from 'react-icons/hi'
 import { BsPin, BsPinFill } from 'react-icons/bs'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
 import AppleNoteLoader from '@/components/AppleNoteLoader'
@@ -93,6 +93,7 @@ function HomeContent() {
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
   const [selectedFolderId, setSelectedFolderId] = useState('')
   const [isFolderMenuOpen, setIsFolderMenuOpen] = useState(false)
+  const [isFilterFolderOpen, setIsFilterFolderOpen] = useState(false)
   const [folderMenuPosition, setFolderMenuPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null)
   const [folderName, setFolderName] = useState('')
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
@@ -477,6 +478,7 @@ function HomeContent() {
         setInviteEmail('')
         setSharingMessage('')
         setIsFolderMenuOpen(false)
+        setIsFilterFolderOpen(false)
         setIsSettingsOpen(false)
         setIsDeleteAccountOpen(false)
         setIsProfileMenuOpen(false)
@@ -763,6 +765,7 @@ function HomeContent() {
           setSelectedFolderId('')
           setAccentColor('#ffffff')
           setIsFolderMenuOpen(false)
+        setIsFilterFolderOpen(false)
           setNoteMembers([])
           setOnlineMembers([])
           setInviteEmail('')
@@ -981,6 +984,7 @@ function HomeContent() {
       const target = event.target as Node
       if (!folderMenuRef.current?.contains(target) && !folderPickerButtonRef.current?.contains(target)) {
         setIsFolderMenuOpen(false)
+        setIsFilterFolderOpen(false)
       }
     }
     const handlePositionChange = () => updateFolderMenuPosition()
@@ -1111,6 +1115,7 @@ function HomeContent() {
         if (deleteAccountPresence.isPresent || event.defaultPrevented) return
         closeNoteForm()
         setIsFolderMenuOpen(false)
+        setIsFilterFolderOpen(false)
         setConfirmation(null)
         setIsPremiumOfferOpen(false)
         setPremiumDetailOpen(false)
@@ -1258,6 +1263,13 @@ function HomeContent() {
   const activeNotes = notes.filter((n) => !n.is_trashed && !deletedNoteIds.has(n.id) && (folderFilter === 'all' || String(n.folder_id ?? '') === folderFilter))
   const trashedNotes = notes.filter((n) => n.is_trashed && n.user_id === user?.id)
   const ownedTrashedCount = trashedNotes.filter((note) => note.user_id === user?.id).length
+
+  const getFolderFilterLabel = () => {
+    if (folderFilter === 'all') return t('Semua')
+    if (folderFilter === '') return t('Tanpa folder')
+    const found = folders.find((f) => String(f.id) === folderFilter)
+    return found ? found.name : t('Semua')
+  }
 
   const formatNoteDate = (dateStr?: string) => {
     if (!dateStr) return ''
@@ -1566,127 +1578,17 @@ function HomeContent() {
   }
   return (
     <div className={`min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans flex flex-col selection:bg-[#0066cc] selection:text-white animate-dashboard-enter ${isDarkMode ? 'theme-dark' : ''}`}>
-      {/* Global Thin Nav Bar (Apple Minimalist - Desktop Only) */}
-      <header data-dashboard-header className="sticky top-0 z-50 hidden sm:flex h-[44px] items-center justify-between bg-[#000000] px-4 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
-        <div className="flex min-w-0 items-center">
-          <span className="font-semibold text-[15px] sm:text-[14px] tracking-normal text-white">Notes</span>
-        </div>
-
-        {/* Profile Button (Ujung Kanan) */}
-        <div className="relative">
-          <button
-            type="button"
-            aria-label={t('Menu profil')}
-            aria-expanded={isProfileMenuOpen}
-            aria-haspopup="menu"
-            onClick={() => setIsProfileMenuOpen((open) => !open)}
-            className="flex min-h-[36px] items-center gap-1.5 rounded-full p-1 text-white transition-colors hover:bg-white/10 active:scale-95"
-          >
-            {(profile?.avatar_url || user.user_metadata?.avatar_url) ? (
-              <Image
-                src={profile?.avatar_url || user.user_metadata.avatar_url}
-                alt=""
-                width={28}
-                height={28}
-                unoptimized
-                className="h-7 w-7 rounded-full object-cover"
-              />
-            ) : (
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20 text-[12px] font-medium">
-                {(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}
-              </span>
-            )}
-            <span aria-hidden="true" className="text-[9px] opacity-70"><HiOutlineChevronDown aria-hidden="true" /></span>
-          </button>
-
-          {/* Profile Menu Popover: Hanya Nama, Email, dan Tombol Logout */}
-          {profileMenuPresence.isPresent && (
-            <>
-              <div
-                className="fixed inset-0 z-50 bg-transparent"
-                inert={profileMenuPresence.isExiting}
-                onClick={() => setIsProfileMenuOpen(false)}
-                aria-hidden="true"
-              />
-              <div
-                role="menu"
-                data-motion-state={profileMenuPresence.isExiting ? 'closing' : 'open'}
-                data-motion-kind="popover"
-                inert={profileMenuPresence.isExiting}
-                className={`motion-popover absolute right-0 top-[calc(100%+8px)] z-[55] w-64 rounded-[14px] border p-2 shadow-2xl backdrop-blur-2xl transition-all ${
-                  isDarkMode
-                    ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7] shadow-[0_12px_36px_rgba(0,0,0,0.6)]'
-                    : 'border-black/5 bg-white/95 text-[#1d1d1f] shadow-[0_12px_36px_rgba(0,0,0,0.15)]'
-                }`}
-              >
-                <div className="px-3 py-2.5">
-                  <p className="truncate text-[15px] font-semibold tracking-[-0.2px]">
-                    {profile?.full_name || user.user_metadata?.full_name || t('Akun Notes')}
-                  </p>
-                  <p className={`truncate text-[13px] tracking-[-0.12px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
-                    {user.email}
-                  </p>
-                </div>
-                <div className={`my-1 h-px ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
-
-                {user.email?.toLowerCase().trim() === 'rasyacarnival@gmail.com' && (
-                  <>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setIsProfileMenuOpen(false)
-                        handleOpenRoleGodAuth()
-                      }}
-                      className={`flex w-full min-h-[40px] items-center justify-between rounded-[10px] px-3 text-left text-[14px] font-medium transition-colors active:scale-95 ${
-                        isDarkMode
-                          ? 'text-[#ff375f] hover:bg-white/10'
-                          : 'text-[#d70015] hover:bg-black/5'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <KitsuneMaskIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                        <span>Switch to God Mode</span>
-                      </span>
-                      <span className="text-[12px] opacity-60">→</span>
-                    </button>
-                    <div className={`my-1 h-px ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
-                  </>
-                )}
-
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setIsProfileMenuOpen(false)
-                    handleLogout()
-                  }}
-                  className={`flex w-full min-h-[40px] items-center gap-2 rounded-[10px] px-3 text-left text-[14px] font-normal transition-colors active:scale-95 ${
-                    isDarkMode
-                      ? 'text-[#ff453a] hover:bg-white/10'
-                      : 'text-[#ff3b30] hover:bg-black/5'
-                  }`}
-                >
-                  <HiOutlineLogout aria-hidden="true" className="h-4 w-4" />
-                  <span>{t('Keluar')}</span>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </header>
-
-      {/* Sub-Nav Frosted Glass (Desktop Only) */}
+      {/* Frosted Nav Bar (Apple Minimalist - Desktop Only) */}
       <nav
         data-dashboard-nav
-        className={`sticky top-[44px] z-40 hidden sm:flex min-h-[50px] items-center justify-between border-b px-3 sm:px-6 md:px-12 backdrop-blur-md transition-colors ${
+        className={`sticky top-0 z-40 hidden sm:flex h-[52px] min-h-[52px] items-center justify-between border-b px-4 sm:px-6 md:px-12 backdrop-blur-md transition-colors ${
           isDarkMode
             ? 'border-white/10 bg-[#1d1d1f]/80'
             : 'border-black/5 bg-[#f5f5f7]/80'
         }`}
       >
+        {/* Left: PageList Button + Title */}
         <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
-          {/* Tombol Page List di sebelah kiri */}
           <button
             type="button"
             aria-label={t('Buka Daftar Halaman & Menu')}
@@ -1701,9 +1603,8 @@ function HomeContent() {
             <HiOutlineMenuAlt2 aria-hidden="true" className="h-5 w-5" />
           </button>
 
-          {/* Judul Halaman Aktif */}
           <div className="flex items-center gap-2 min-w-0">
-            <span className="truncate text-[18px] font-semibold tracking-[-0.374px] sm:text-[21px] sm:tracking-[0.231px]">
+            <span className="truncate text-[18px] font-semibold tracking-[-0.374px] sm:text-[20px] sm:tracking-[-0.2px]">
               {activeTab === 'notes' ? t('Catatan Saya') : t('Sampah')}
             </span>
 
@@ -1717,19 +1618,126 @@ function HomeContent() {
           </div>
         </div>
 
-        {activeTab === 'trash' && trashedNotes.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setConfirmation({ action: 'deleteAll', count: ownedTrashedCount })}
-            className={`min-h-[36px] shrink-0 rounded-full px-3 text-[12px] sm:text-[13px] font-normal transition-all active:scale-95 ${
-              isDarkMode
-                ? 'text-[#ff453a] hover:bg-white/10'
-                : 'text-[#ff3b30] hover:bg-black/5'
-            }`}
-          >
-            {t('Kosongkan Sampah')}
-          </button>
-        )}
+        {/* Right: Actions + Profile Avatar */}
+        <div className="flex items-center gap-3 shrink-0">
+          {activeTab === 'trash' && trashedNotes.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setConfirmation({ action: 'deleteAll', count: ownedTrashedCount })}
+              className={`min-h-[32px] shrink-0 rounded-full px-3 text-[12px] sm:text-[13px] font-normal transition-all active:scale-95 ${
+                isDarkMode
+                  ? 'text-[#ff453a] hover:bg-white/10'
+                  : 'text-[#ff3b30] hover:bg-black/5'
+              }`}
+            >
+              {t('Kosongkan Sampah')}
+            </button>
+          )}
+
+          {/* Desktop Profile Button */}
+          <div className="relative">
+            <button
+              type="button"
+              aria-label={t('Menu profil')}
+              aria-expanded={isProfileMenuOpen}
+              aria-haspopup="menu"
+              onClick={() => setIsProfileMenuOpen((open) => !open)}
+              className="flex items-center rounded-full p-0.5 transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3]"
+            >
+              {(profile?.avatar_url || user.user_metadata?.avatar_url) ? (
+                <Image
+                  src={profile?.avatar_url || user.user_metadata.avatar_url}
+                  alt=""
+                  width={34}
+                  height={34}
+                  unoptimized
+                  className={`h-[34px] w-[34px] rounded-full object-cover border shadow-sm ${
+                    isDarkMode ? 'border-white/20' : 'border-black/10'
+                  }`}
+                />
+              ) : (
+                <span className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#0066cc] text-white text-[13px] font-medium shadow-sm">
+                  {(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}
+                </span>
+              )}
+            </button>
+
+            {/* Profile Menu Popover */}
+            {profileMenuPresence.isPresent && (
+              <>
+                <div
+                  className="fixed inset-0 z-50 bg-transparent"
+                  inert={profileMenuPresence.isExiting}
+                  onClick={() => setIsProfileMenuOpen(false)}
+                  aria-hidden="true"
+                />
+                <div
+                  role="menu"
+                  data-motion-state={profileMenuPresence.isExiting ? 'closing' : 'open'}
+                  data-motion-kind="popover"
+                  inert={profileMenuPresence.isExiting}
+                  className={`motion-popover absolute right-0 top-[calc(100%+8px)] z-[55] w-64 rounded-[14px] border p-2 shadow-2xl backdrop-blur-2xl transition-all ${
+                    isDarkMode
+                      ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7] shadow-[0_12px_36px_rgba(0,0,0,0.6)]'
+                      : 'border-black/5 bg-white/95 text-[#1d1d1f] shadow-[0_12px_36px_rgba(0,0,0,0.15)]'
+                  }`}
+                >
+                  <div className="px-3 py-2.5">
+                    <p className="truncate text-[15px] font-semibold tracking-[-0.2px]">
+                      {profile?.full_name || user.user_metadata?.full_name || t('Akun Notes')}
+                    </p>
+                    <p className={`truncate text-[13px] tracking-[-0.12px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
+                      {user.email}
+                    </p>
+                  </div>
+                  <div className={`my-1 h-px ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
+
+                  {isRoleGodUser && (
+                    <>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setIsProfileMenuOpen(false)
+                          handleOpenRoleGodAuth()
+                        }}
+                        className={`flex w-full min-h-[40px] items-center justify-between rounded-[10px] px-3 text-left text-[14px] font-medium transition-colors active:scale-95 ${
+                          isDarkMode
+                            ? 'text-[#ff375f] hover:bg-white/10'
+                            : 'text-[#d70015] hover:bg-black/5'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <KitsuneMaskIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          <span>Switch to God Mode</span>
+                        </span>
+                        <span className="text-[12px] opacity-60">→</span>
+                      </button>
+                      <div className={`my-1 h-px ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsProfileMenuOpen(false)
+                      handleLogout()
+                    }}
+                    className={`flex w-full min-h-[40px] items-center gap-2 rounded-[10px] px-3 text-left text-[14px] font-normal transition-colors active:scale-95 ${
+                      isDarkMode
+                        ? 'text-[#ff453a] hover:bg-white/10'
+                        : 'text-[#ff3b30] hover:bg-black/5'
+                    }`}
+                  >
+                    <HiOutlineLogout aria-hidden="true" className="h-4 w-4" />
+                    <span>{t('Keluar')}</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </nav>
 
       {activeTab === 'notes' && !isFormOpen && (
@@ -2042,7 +2050,7 @@ function HomeContent() {
       )}
 
       {/* Content Area */}
-      <main data-dashboard-main data-motion-content className="mx-auto w-full max-w-[1440px] flex-1 px-4 pt-9 pb-28 sm:px-6 sm:py-8 sm:pb-28 md:px-12">
+      <main data-dashboard-main data-motion-content className="mx-auto w-full max-w-[1440px] flex-1 px-4 pt-9 pb-28 sm:px-6 sm:pt-6 sm:pb-28 md:px-12">
         {premiumMessage && (
           <div role="status" className="mb-5 flex items-center justify-between gap-4 rounded-[11px] border border-[#e0e0e0] bg-white px-4 py-3 text-[14px] text-[#1d1d1f]">
             <span>{premiumMessage}</span>
@@ -2050,9 +2058,9 @@ function HomeContent() {
           </div>
         )}
 
-        {/* Header from Figma Wireframe: Title, Subtitle, PageList, Big Avatar, Search, Category/Folder Pills */}
+        {/* Header from Figma Wireframe: Title, Subtitle, PageList, Big Avatar (Mobile Only) */}
         <div className="mb-1 sm:mb-6">
-          <div className="mb-5 flex items-center justify-between">
+          <div className="mb-5 flex items-center justify-between sm:hidden">
             <div>
               <h1 className={`text-[32px] sm:text-[38px] font-bold tracking-tight leading-none ${
                 isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
@@ -2191,150 +2199,218 @@ function HomeContent() {
             </div>
           </div>
 
-          {/* Search bar matching wireframe [Q Cari catatan...] */}
-          <div className="relative mb-3.5 w-full max-w-xl">
-            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[17px] text-[#7a7a7a]">
-              <HiOutlineSearch aria-hidden="true" />
-            </span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('Cari catatan...')}
-              className={`h-11 w-full rounded-[14px] border pl-10 pr-9 text-[15px] outline-none transition-all placeholder:text-[#7a7a7a]/70 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
-                isDarkMode
-                  ? 'border-white/10 bg-[#252527] text-[#f5f5f7] focus:bg-[#2c2c2e]'
-                  : 'border-[#e0e0e0] bg-[#fafafc] text-[#1d1d1f] focus:bg-white'
-              }`}
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                aria-label={t('Tutup')}
-                onClick={() => setSearchQuery('')}
-                className={`absolute right-3 top-1/2 -translate-y-1/2 text-[14px] ${
-                  isDarkMode ? 'text-[#86868b] hover:text-white' : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
-                }`}
-              >
-                <HiOutlineX aria-hidden="true" />
-              </button>
-            )}
-          </div>
+          {/* Unified Controls Toolbar: [ Folder Dropdown ] [ Search Bar ] [ Sort Toggle ] */}
+          <div className="mb-6 flex items-center gap-2 sm:gap-3">
+            {/* 1. Left: Folder Dropdown (Notes tab only) */}
+            {activeTab === 'notes' && (
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  aria-label={t('Filter folder')}
+                  aria-expanded={isFilterFolderOpen}
+                  aria-haspopup="listbox"
+                  onClick={() => setIsFilterFolderOpen((prev) => !prev)}
+                  className={`flex h-10 items-center gap-1.5 rounded-full border px-3 sm:px-3.5 text-[13px] font-medium transition-all active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
+                    isDarkMode
+                      ? 'border-white/10 bg-[#252527] text-[#f5f5f7] hover:bg-[#2c2c2e]'
+                      : 'border-[#e0e0e0] bg-white text-[#1d1d1f] hover:bg-[#fafafc] shadow-sm'
+                  }`}
+                >
+                  <HiOutlineFolder className="h-4 w-4 shrink-0 text-[#0066cc]" aria-hidden="true" />
+                  <span className="truncate max-w-[75px] min-[400px]:max-w-[120px] sm:max-w-[160px]">
+                    {getFolderFilterLabel()}
+                  </span>
+                  <HiOutlineChevronDown
+                    className={`h-3.5 w-3.5 shrink-0 opacity-60 transition-transform ${isFilterFolderOpen ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                  />
+                </button>
 
-          {/* Category / Folder filter pills matching wireframe [Semua] [Pribadi] [Kerja] [Ide]... */}
-          {activeTab === 'notes' && (
-            <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 pt-0.5 sm:mx-0 sm:px-0 no-scrollbar">
-              <button
-                type="button"
-                onClick={() => setFolderFilter('all')}
-                className={`h-9 shrink-0 rounded-full px-4 text-[13px] font-medium tracking-tight transition-all active:scale-95 ${
-                  folderFilter === 'all'
-                    ? isDarkMode
-                      ? 'bg-white text-[#1d1d1f] shadow-sm font-semibold'
-                      : 'bg-[#1d1d1f] text-white shadow-sm'
-                    : isDarkMode
-                      ? 'border border-white/10 bg-[#252527] text-[#86868b] hover:bg-[#2c2c2e] hover:text-[#f5f5f7]'
-                      : 'border border-[#e0e0e0] bg-white text-[#1d1d1f]/75 hover:bg-[#fafafc] hover:text-[#1d1d1f]'
-                }`}
-              >
-                {t('Semua')}
-              </button>
-
-              {folders.map((folder) => {
-                const isSelected = folderFilter === String(folder.id)
-                return (
-                  <button
-                    key={folder.id}
-                    type="button"
-                    onClick={() => setFolderFilter(String(folder.id))}
-                    className={`h-9 shrink-0 rounded-full px-4 text-[13px] font-medium tracking-tight transition-all active:scale-95 ${
-                      isSelected
-                        ? isDarkMode
-                          ? 'bg-white text-[#1d1d1f] shadow-sm font-semibold'
-                          : 'bg-[#1d1d1f] text-white shadow-sm'
-                        : isDarkMode
-                          ? 'border border-white/10 bg-[#252527] text-[#86868b] hover:bg-[#2c2c2e] hover:text-[#f5f5f7]'
-                          : 'border border-[#e0e0e0] bg-white text-[#1d1d1f]/75 hover:bg-[#fafafc] hover:text-[#1d1d1f]'
-                    }`}
-                  >
-                    {folder.name}
-                  </button>
-                )
-              })}
-
-              <button
-                type="button"
-                onClick={() => setFolderFilter('')}
-                className={`h-9 shrink-0 rounded-full px-4 text-[13px] font-medium tracking-tight transition-all active:scale-95 ${
-                  folderFilter === ''
-                    ? isDarkMode
-                      ? 'bg-white text-[#1d1d1f] shadow-sm font-semibold'
-                      : 'bg-[#1d1d1f] text-white shadow-sm'
-                    : isDarkMode
-                      ? 'border border-white/10 bg-[#252527] text-[#86868b] hover:bg-[#2c2c2e] hover:text-[#f5f5f7]'
-                      : 'border border-[#e0e0e0] bg-white text-[#1d1d1f]/75 hover:bg-[#fafafc] hover:text-[#1d1d1f]'
-                }`}
-              >
-                {t('Tanpa folder')}
-              </button>
-
-              {isPremium && (
-                isCreatingFolder ? (
-                  <form onSubmit={createFolder} className="flex shrink-0 items-center gap-1.5">
-                    <input
-                      autoFocus
-                      required
-                      maxLength={80}
-                      aria-label={t('Nama folder baru')}
-                      value={folderName}
-                      onChange={(event) => setFolderName(event.target.value)}
-                      placeholder={t('Nama folder')}
-                      className={`h-9 w-36 rounded-full border px-3.5 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3] ${
-                        isDarkMode
-                          ? 'border-white/15 bg-[#252527] text-[#f5f5f7]'
-                          : 'border-[#e0e0e0] bg-white text-[#1d1d1f]'
-                      }`}
+                {isFilterFolderOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-30 bg-transparent"
+                      onClick={() => {
+                        setIsFilterFolderOpen(false)
+                        setIsCreatingFolder(false)
+                      }}
+                      aria-hidden="true"
                     />
-                    <button type="submit" className="h-9 rounded-full bg-[#0066cc] px-3.5 text-[13px] font-medium text-white active:scale-95">{t('Buat')}</button>
-                    <button type="button" onClick={() => setIsCreatingFolder(false)} className="h-9 rounded-full px-2.5 text-[13px] text-[#0066cc] active:scale-95">{t('Batal')}</button>
-                  </form>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsCreatingFolder(true)}
-                    className="flex h-9 shrink-0 items-center gap-1 rounded-full border border-dashed border-[#0066cc]/50 px-3.5 text-[13px] font-medium text-[#0066cc] hover:bg-[#0066cc]/5 active:scale-95 transition-all"
-                  >
-                    <HiOutlinePlus aria-hidden="true" />
-                    <span>{t('Folder')}</span>
-                  </button>
-                )
+                    <div
+                      role="listbox"
+                      className={`absolute left-0 top-[calc(100%+6px)] z-40 w-56 rounded-[14px] border p-1.5 shadow-xl backdrop-blur-xl transition-all ${
+                        isDarkMode
+                          ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7] shadow-[0_12px_36px_rgba(0,0,0,0.6)]'
+                          : 'border-black/5 bg-white/95 text-[#1d1d1f] shadow-[0_12px_36px_rgba(0,0,0,0.15)]'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={folderFilter === 'all'}
+                        onClick={() => {
+                          setFolderFilter('all')
+                          setIsFilterFolderOpen(false)
+                        }}
+                        className={`flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[13px] transition-colors active:scale-[0.98] ${
+                          folderFilter === 'all'
+                            ? isDarkMode ? 'bg-white/15 text-white font-medium' : 'bg-black/5 text-[#1d1d1f] font-medium'
+                            : isDarkMode ? 'text-[#f5f5f7] hover:bg-white/10' : 'text-[#1d1d1f] hover:bg-black/5'
+                        }`}
+                      >
+                        <span className="truncate">{t('Semua catatan')}</span>
+                        {folderFilter === 'all' && <HiOutlineCheck className="h-4 w-4 text-[#0066cc]" aria-hidden="true" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={folderFilter === ''}
+                        onClick={() => {
+                          setFolderFilter('')
+                          setIsFilterFolderOpen(false)
+                        }}
+                        className={`flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[13px] transition-colors active:scale-[0.98] ${
+                          folderFilter === ''
+                            ? isDarkMode ? 'bg-white/15 text-white font-medium' : 'bg-black/5 text-[#1d1d1f] font-medium'
+                            : isDarkMode ? 'text-[#f5f5f7] hover:bg-white/10' : 'text-[#1d1d1f] hover:bg-black/5'
+                        }`}
+                      >
+                        <span className="truncate">{t('Tanpa folder')}</span>
+                        {folderFilter === '' && <HiOutlineCheck className="h-4 w-4 text-[#0066cc]" aria-hidden="true" />}
+                      </button>
+
+                      {folders.length > 0 && (
+                        <>
+                          <div className={`my-1 h-px ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
+                          <div className="max-h-48 overflow-y-auto space-y-0.5">
+                            {folders.map((folder) => (
+                              <button
+                                key={folder.id}
+                                type="button"
+                                role="option"
+                                aria-selected={folderFilter === String(folder.id)}
+                                onClick={() => {
+                                  setFolderFilter(String(folder.id))
+                                  setIsFilterFolderOpen(false)
+                                }}
+                                className={`flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[13px] transition-colors active:scale-[0.98] ${
+                                  folderFilter === String(folder.id)
+                                    ? isDarkMode ? 'bg-white/15 text-white font-medium' : 'bg-black/5 text-[#1d1d1f] font-medium'
+                                    : isDarkMode ? 'text-[#f5f5f7] hover:bg-white/10' : 'text-[#1d1d1f] hover:bg-black/5'
+                                }`}
+                              >
+                                <span className="truncate">{folder.name}</span>
+                                {folderFilter === String(folder.id) && <HiOutlineCheck className="h-4 w-4 text-[#0066cc]" aria-hidden="true" />}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      {isPremium && (
+                        <>
+                          <div className={`my-1 h-px ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
+                          {isCreatingFolder ? (
+                            <form
+                              onSubmit={async (e) => {
+                                await createFolder(e)
+                                setIsFilterFolderOpen(false)
+                              }}
+                              className="p-1"
+                            >
+                              <input
+                                autoFocus
+                                required
+                                maxLength={80}
+                                aria-label={t('Nama folder baru')}
+                                value={folderName}
+                                onChange={(e) => setFolderName(e.target.value)}
+                                placeholder={t('Nama folder')}
+                                className={`h-8 w-full rounded-[8px] border px-2.5 text-[12px] outline-none focus-visible:ring-1 focus-visible:ring-[#0071e3] ${
+                                  isDarkMode
+                                    ? 'border-white/15 bg-[#252527] text-white'
+                                    : 'border-[#e0e0e0] bg-white text-[#1d1d1f]'
+                                }`}
+                              />
+                              <div className="mt-1.5 flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setIsCreatingFolder(false)}
+                                  className="px-2 py-1 text-[11px] text-[#7a7a7a] active:scale-95"
+                                >
+                                  {t('Batal')}
+                                </button>
+                                <button
+                                  type="submit"
+                                  className="rounded-full bg-[#0066cc] px-2.5 py-1 text-[11px] font-medium text-white active:scale-95"
+                                >
+                                  {t('Buat')}
+                                </button>
+                              </div>
+                            </form>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setIsCreatingFolder(true)}
+                              className="flex w-full items-center gap-1.5 rounded-[8px] px-2.5 py-2 text-left text-[12px] font-medium text-[#0066cc] hover:bg-[#0066cc]/5 active:scale-[0.98]"
+                            >
+                              <HiOutlinePlus className="h-3.5 w-3.5" aria-hidden="true" />
+                              <span>{t('Buat folder baru')}</span>
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* 2. Center: Search Bar */}
+            <div className="relative flex-1 min-w-0">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-[#7a7a7a]">
+                <HiOutlineSearch aria-hidden="true" />
+              </span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t('Cari catatan...')}
+                className={`h-10 w-full rounded-full border pl-8 pr-8 text-[13px] outline-none transition-all placeholder:text-[#7a7a7a]/70 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
+                  isDarkMode
+                    ? 'border-white/10 bg-[#252527] text-[#f5f5f7] focus:bg-[#2c2c2e]'
+                    : 'border-[#e0e0e0] bg-white text-[#1d1d1f] focus:border-[#0066cc] shadow-sm'
+                }`}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  aria-label={t('Tutup')}
+                  onClick={() => setSearchQuery('')}
+                  className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-[13px] ${
+                    isDarkMode ? 'text-[#86868b] hover:text-white' : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
+                  }`}
+                >
+                  <HiOutlineX aria-hidden="true" />
+                </button>
               )}
             </div>
-          )}
 
-          {/* Subheader: Active filter name on left + Sort toggle on right (matching wireframe) */}
-          <div className="flex items-center justify-between pt-3.5 pb-1 sm:pt-1 sm:pb-3">
-            <span className={`text-[14px] font-semibold ${
-              isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
-            }`}>
-              {folderFilter === 'all'
-                ? t('Semua catatan')
-                : folderFilter === ''
-                  ? t('Tanpa folder')
-                  : folders.find((f) => String(f.id) === folderFilter)?.name ?? t('Semua catatan')}
-            </span>
-
+            {/* 3. Right: Sort Toggle */}
             <button
               type="button"
               onClick={() => setSortOrder((prev) => (prev === 'newest' ? 'oldest' : 'newest'))}
-              className={`flex items-center gap-1 text-[13px] active:scale-95 transition-colors ${
-                isDarkMode ? 'text-[#86868b] hover:text-[#f5f5f7]' : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
+              aria-label={sortOrder === 'newest' ? t('Urutkan terbaru') : t('Urutkan terlama')}
+              title={sortOrder === 'newest' ? t('Terbaru') : t('Terlama')}
+              className={`flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 sm:px-3.5 text-[13px] font-medium transition-all active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
+                isDarkMode
+                  ? 'border-white/10 bg-[#252527] text-[#f5f5f7] hover:bg-[#2c2c2e]'
+                  : 'border-[#e0e0e0] bg-white text-[#1d1d1f] hover:bg-[#fafafc] shadow-sm'
               }`}
             >
-              <span>{sortOrder === 'newest' ? t('Terbaru') : t('Terlama')}</span>
-              <span className={`text-[10px] transition-transform ${sortOrder === 'oldest' ? 'rotate-180' : ''}`}>
-                <HiOutlineChevronDown aria-hidden="true" />
-              </span>
+              <span className="hidden min-[360px]:inline">{sortOrder === 'newest' ? t('Terbaru') : t('Terlama')}</span>
+              <HiOutlineChevronDown className={`h-3.5 w-3.5 shrink-0 opacity-70 transition-transform ${sortOrder === 'oldest' ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -2911,6 +2987,7 @@ function HomeContent() {
                   setSelectedFolderId(folder.id)
                   setSaveStatus('idle')
                   setIsFolderMenuOpen(false)
+        setIsFilterFolderOpen(false)
                 }}
                 className={`min-h-10 w-full rounded-full px-3 text-left text-[14px] transition-colors hover:bg-[#f5f5f7] ${selectedFolderId === folder.id ? 'text-[#0066cc]' : ''}`}
               >
