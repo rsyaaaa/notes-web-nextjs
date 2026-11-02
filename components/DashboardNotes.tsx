@@ -423,6 +423,29 @@ function AccountDashboardNotes({ user, initialProfile, onLogout }: DashboardNote
     await reloadNotes()
   }
 
+  // Dismiss deletion notice (for collaborators whose shared note was deleted by owner)
+  const handleDismissNotice = async (notice: import('@/lib/types').DeletedNoteNotice) => {
+    const scope = accountScopeRef.current
+    if (!scope.active) return
+
+    deletedNoteIdsRef.current.delete(notice.note_id)
+    setDeletionNotices((current) => current.filter((item) => item.id !== notice.id))
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        await fetch(`/api/notices?id=${encodeURIComponent(notice.id)}&note_id=${notice.note_id}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        })
+      }
+    } catch (err) {
+      console.error('Failed to dismiss deletion notice:', err)
+    }
+  }
+
   // Create Folder
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -685,7 +708,7 @@ function AccountDashboardNotes({ user, initialProfile, onLogout }: DashboardNote
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
               {deletionNotices.map((notice) => (
-                <DeletedNoteCard key={notice.id} notice={notice} isDark={isDarkMode} />
+                <DeletedNoteCard key={notice.id} notice={notice} isDark={isDarkMode} onDismiss={handleDismissNotice} />
               ))}
               {activeNotes.map((note) => {
                 const accent = ACCENT_COLORS.find((c) => c.hex.toLowerCase() === (note.accent_color || '#ffffff').toLowerCase()) || ACCENT_COLORS[0]

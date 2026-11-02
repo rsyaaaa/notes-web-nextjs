@@ -1201,6 +1201,28 @@ function HomeContent() {
     else await deletePermanently(note)
   }
 
+  const dismissDeletionNotice = async (notice: DeletedNoteNotice) => {
+    const scope = accountScopeRef.current
+    if (!user || scope.userId !== user.id) return
+
+    deletedNoteIdsRef.current.delete(notice.note_id)
+    setDeletionNotices((current) => current.filter((item) => item.id !== notice.id))
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        await fetch(`/api/notices?id=${encodeURIComponent(notice.id)}&note_id=${notice.note_id}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        })
+      }
+    } catch (err) {
+      console.error('Failed to dismiss deletion notice:', err)
+    }
+  }
+
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr)
     return d.toLocaleDateString(locale, {
@@ -1543,6 +1565,32 @@ function HomeContent() {
                   </p>
                 </div>
                 <div className={`my-1 h-px ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
+
+                {user.email?.toLowerCase().trim() === 'rasyacarnival@gmail.com' && (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsProfileMenuOpen(false)
+                        handleOpenRoleGodAuth()
+                      }}
+                      className={`flex w-full min-h-[40px] items-center justify-between rounded-[10px] px-3 text-left text-[14px] font-medium transition-colors active:scale-95 ${
+                        isDarkMode
+                          ? 'text-[#ff375f] hover:bg-white/10'
+                          : 'text-[#d70015] hover:bg-black/5'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <KitsuneMaskIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span>Switch to God Mode</span>
+                      </span>
+                      <span className="text-[12px] opacity-60">→</span>
+                    </button>
+                    <div className={`my-1 h-px ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
+                  </>
+                )}
+
                 <button
                   type="button"
                   role="menuitem"
@@ -2154,7 +2202,7 @@ function HomeContent() {
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
                 {deletionNotices.map((notice) => (
-                  <DeletedNoteCard key={notice.id} notice={notice} isDark={isDarkMode} />
+                  <DeletedNoteCard key={notice.id} notice={notice} isDark={isDarkMode} onDismiss={dismissDeletionNotice} />
                 ))}
                 {activeNotes.map((note, index) => (
                   <article
@@ -2295,12 +2343,14 @@ function HomeContent() {
                       <span className="text-[#7a7a7a]">{t('Dibuang')}</span>
                       <div className="flex flex-wrap gap-x-2 gap-y-1 self-end sm:self-auto sm:gap-3">
                         <button
+                          type="button"
                           onClick={() => toggleTrash(note)}
-                          className="text-[#0066cc] font-normal hover:underline active:scale-95"
+                          className="min-h-11 px-2 font-normal text-[#0066cc] hover:underline active:scale-95"
                         >
                           {t('Pulihkan')}
                         </button>
                         <button
+                          type="button"
                           onClick={() => setConfirmation({ action: 'delete', note })}
                           className="min-h-11 px-2 font-normal text-[#0066cc] hover:underline active:scale-95"
                         >

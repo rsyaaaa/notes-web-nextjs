@@ -893,10 +893,27 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   }
 
   if (deletionNotice) {
+    const handleDismissNotice = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token) {
+          await fetch(`/api/notices?id=${encodeURIComponent(deletionNotice.id)}&note_id=${deletionNotice.note_id}`, {
+            method: 'DELETE',
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          })
+        }
+      } catch (err) {
+        console.error('Failed to dismiss deletion notice:', err)
+      }
+      router.push('/')
+    }
+
     return (
       <main className={`flex min-h-screen flex-col items-center justify-center gap-6 px-4 font-sans ${isDarkMode ? 'bg-[#1d1d1f] text-[#f5f5f7]' : 'bg-[#f5f5f7] text-[#1d1d1f]'}`}>
         <div className="w-full max-w-[420px]">
-          <DeletedNoteCard notice={deletionNotice} isDark={isDarkMode} />
+          <DeletedNoteCard notice={deletionNotice} isDark={isDarkMode} onDismiss={handleDismissNotice} />
         </div>
         <button type="button" onClick={() => router.push('/')} className="inline-flex min-h-11 items-center rounded-full bg-[#0066cc] px-6 text-[17px] text-white active:scale-95">
           <HiOutlineChevronLeft aria-hidden="true" className="mr-1 h-5 w-5" /> {t('Kembali ke Catatan')}
