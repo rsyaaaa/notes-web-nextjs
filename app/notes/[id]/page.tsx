@@ -702,7 +702,10 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
     if (!accountScopeRef.current.active || deletedRef.current) return
     const nextPinned = !isPinned
     setIsPinned(nextPinned)
-    await saveNote({ is_pinned: nextPinned })
+    const success = await saveNote({ is_pinned: nextPinned })
+    if (!success && accountScopeRef.current.active) {
+      setIsPinned(!nextPinned)
+    }
   }
 
   // Toggle Trash Status
@@ -989,7 +992,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
 
       {/* 2. Top Nav Bar (Clean, single-tier navigation on mobile & desktop) */}
       <nav
-        className={`sticky top-0 md:top-[44px] z-40 flex h-[50px] items-center justify-between border-b px-3 sm:px-6 md:px-12 backdrop-blur-md transition-colors ${
+        className={`sticky top-0 md:top-[44px] z-40 flex min-h-[56px] pt-3 pb-3 sm:py-0 sm:h-[50px] sm:min-h-[50px] items-center justify-between border-b px-4 sm:px-6 md:px-12 backdrop-blur-md transition-colors ${
           isDarkMode
             ? 'border-[#3a3a3e]/80 bg-[#1d1d1f]/85'
             : 'border-[#e0e0e0]/80 bg-[#f5f5f7]/85'
@@ -1164,19 +1167,21 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             )}
           </div>
 
-          {/* Primary Action Button (Selesai) */}
+          {/* Primary Action Button (Selesai / Done) */}
           <button
             type="button"
             onClick={() => handleBackToDashboard()}
             disabled={isSubmitting}
-            className={`flex min-h-[36px] items-center gap-1.5 rounded-full px-4 text-[14px] font-normal text-white transition-all active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
+            className={`flex min-h-[44px] items-center gap-1.5 text-[17px] font-semibold tracking-[-0.374px] transition-all active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] sm:min-h-[36px] sm:rounded-full sm:px-4 sm:text-[14px] sm:font-normal sm:text-white ${
               isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
             } ${
-              isDarkMode ? 'bg-[#0066cc] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0055b3]'
+              isDarkMode
+                ? 'text-[#2997ff] sm:bg-[#0066cc] sm:hover:bg-[#0071e3] sm:text-white'
+                : 'text-[#0066cc] sm:bg-[#0066cc] sm:hover:bg-[#0055b3] sm:text-white'
             }`}
           >
             {isSubmitting && (
-              <ImSpinner2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-white" />
+              <ImSpinner2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin sm:text-white" />
             )}
             <span>{isSubmitting ? t('Menyimpan...') : t('Selesai')}</span>
           </button>

@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { FcGoogle } from 'react-icons/fc'
-import { HiStar, HiOutlineChevronDown, HiOutlineDocumentText, HiOutlineTrash, HiOutlineCog, HiOutlineMoon, HiOutlineSun, HiOutlineCheck, HiOutlineX, HiOutlinePlus, HiOutlineLogout, HiOutlineMenuAlt2, HiOutlineEye, HiOutlineEyeOff } from 'react-icons/hi'
+import { HiStar, HiOutlineChevronDown, HiOutlineDocumentText, HiOutlineTrash, HiOutlineCog, HiOutlineMoon, HiOutlineSun, HiOutlineCheck, HiOutlineX, HiOutlinePlus, HiOutlineLogout, HiOutlineMenuAlt2, HiOutlineEye, HiOutlineEyeOff, HiOutlineSearch } from 'react-icons/hi'
 import { BsPin, BsPinFill } from 'react-icons/bs'
 import { supabase, supabaseConfigReady } from '@/lib/supabaseClient'
 import AppleNoteLoader from '@/components/AppleNoteLoader'
@@ -89,6 +89,8 @@ function HomeContent() {
   const [currentTime, setCurrentTime] = useState(0)
   const [folders, setFolders] = useState<{ id: number; name: string }[]>([])
   const [folderFilter, setFolderFilter] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
   const [selectedFolderId, setSelectedFolderId] = useState('')
   const [isFolderMenuOpen, setIsFolderMenuOpen] = useState(false)
   const [folderMenuPosition, setFolderMenuPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null)
@@ -496,6 +498,8 @@ function HomeContent() {
         setPinAnimation(null)
         setConfirmation(null)
         setFolderFilter('all')
+        setSearchQuery('')
+        setSortOrder('newest')
       }
       setUser(currentUser)
     }
@@ -1134,23 +1138,38 @@ function HomeContent() {
   const togglePin = async (note: Note) => {
     const scope = accountScopeRef.current
     if (!user || scope.userId !== user.id) return
-    if (!note.is_pinned && note.user_id === user.id && !isPremium) {
+    const nextPinned = !Boolean(note.is_pinned)
+    if (nextPinned && note.user_id === user.id && !isPremium) {
       const currentPinnedCount = notes.filter((item) => item.user_id === user.id && item.is_pinned && !item.is_trashed).length
       if (currentPinnedCount >= 3) {
         setPremiumMessage(t('Paket Free memiliki batas 3 catatan pin. Premium membuka pin tanpa batas.'))
         return
       }
     }
-    setPinAnimation({ id: note.id, pinning: !note.is_pinned })
+
+    // Optimistic update for instant UI response
+    setNotes((prevNotes) =>
+      prevNotes.map((item) => (item.id === note.id ? { ...item, is_pinned: nextPinned } : item))
+    )
+    setPinAnimation({ id: note.id, pinning: nextPinned })
     window.setTimeout(() => { if (scope === accountScopeRef.current) setPinAnimation(null) }, 500)
+
     const { error } = await supabase
       .from('notes')
-      .update({ is_pinned: !note.is_pinned, updated_at: new Date().toISOString() })
+      .update({ is_pinned: nextPinned, updated_at: new Date().toISOString() })
       .eq('id', note.id)
+      .eq('user_id', user.id)
 
     if (scope !== accountScopeRef.current) return
-    if (!error) fetchNotes(user.id)
-    else setPremiumMessage(error.message)
+    if (!error) {
+      void fetchNotes(user.id)
+    } else {
+      // Revert optimistic update if database error occurred
+      setNotes((prevNotes) =>
+        prevNotes.map((item) => (item.id === note.id ? { ...item, is_pinned: note.is_pinned } : item))
+      )
+      setPremiumMessage(error.message)
+    }
   }
 
   const toggleTrash = async (note: Note) => {
@@ -1239,6 +1258,50 @@ function HomeContent() {
   const activeNotes = notes.filter((n) => !n.is_trashed && !deletedNoteIds.has(n.id) && (folderFilter === 'all' || String(n.folder_id ?? '') === folderFilter))
   const trashedNotes = notes.filter((n) => n.is_trashed && n.user_id === user?.id)
   const ownedTrashedCount = trashedNotes.filter((note) => note.user_id === user?.id).length
+
+  const formatNoteDate = (dateStr?: string) => {
+    if (!dateStr) return ''
+    try {
+      const d = new Date(dateStr)
+      const now = new Date()
+      const isToday = d.toDateString() === now.toDateString()
+      const yesterday = new Date(now)
+      yesterday.setDate(yesterday.getDate() - 1)
+      const isYesterday = d.toDateString() === yesterday.toDateString()
+
+      const timeStr = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+      if (isToday) return `${t('Hari ini')}, ${timeStr}`
+      if (isYesterday) return `${t('Kemarin')}, ${timeStr}`
+      return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' })
+    } catch {
+      return dateStr
+    }
+  }
+
+  const filteredActiveNotes = activeNotes
+    .filter((note) => {
+      if (!searchQuery.trim()) return true
+      const q = searchQuery.toLowerCase()
+      return (note.title || '').toLowerCase().includes(q) || (note.content || '').toLowerCase().includes(q)
+    })
+    .sort((a, b) => {
+      if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1
+      const timeA = new Date(a.updated_at || a.created_at).getTime()
+      const timeB = new Date(b.updated_at || b.created_at).getTime()
+      return sortOrder === 'newest' ? timeB - timeA : timeA - timeB
+    })
+
+  const filteredTrashedNotes = trashedNotes
+    .filter((note) => {
+      if (!searchQuery.trim()) return true
+      const q = searchQuery.toLowerCase()
+      return (note.title || '').toLowerCase().includes(q) || (note.content || '').toLowerCase().includes(q)
+    })
+    .sort((a, b) => {
+      const timeA = new Date(a.updated_at || a.created_at).getTime()
+      const timeB = new Date(b.updated_at || b.created_at).getTime()
+      return sortOrder === 'newest' ? timeB - timeA : timeA - timeB
+    })
 
   const openPlanDetails = () => {
     if (isPremium) setPremiumDetailOpen(true)
@@ -1503,8 +1566,8 @@ function HomeContent() {
   }
   return (
     <div className={`min-h-screen bg-[#f5f5f7] text-[#1d1d1f] font-sans flex flex-col selection:bg-[#0066cc] selection:text-white animate-dashboard-enter ${isDarkMode ? 'theme-dark' : ''}`}>
-      {/* Global Thin Nav Bar (Apple Minimalist) */}
-      <header data-dashboard-header className="sticky top-0 z-50 flex h-[44px] items-center justify-between bg-[#000000] px-4 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
+      {/* Global Thin Nav Bar (Apple Minimalist - Desktop Only) */}
+      <header data-dashboard-header className="sticky top-0 z-50 hidden sm:flex h-[44px] items-center justify-between bg-[#000000] px-4 text-[12px] tracking-[-0.12px] text-white sm:px-6 md:px-12">
         <div className="flex min-w-0 items-center">
           <span className="font-semibold text-[15px] sm:text-[14px] tracking-normal text-white">Notes</span>
         </div>
@@ -1613,10 +1676,10 @@ function HomeContent() {
         </div>
       </header>
 
-      {/* Sub-Nav Frosted Glass */}
+      {/* Sub-Nav Frosted Glass (Desktop Only) */}
       <nav
         data-dashboard-nav
-        className={`sticky top-[44px] z-40 flex min-h-[50px] items-center justify-between border-b px-3 sm:px-6 md:px-12 backdrop-blur-md transition-colors ${
+        className={`sticky top-[44px] z-40 hidden sm:flex min-h-[50px] items-center justify-between border-b px-3 sm:px-6 md:px-12 backdrop-blur-md transition-colors ${
           isDarkMode
             ? 'border-white/10 bg-[#1d1d1f]/80'
             : 'border-black/5 bg-[#f5f5f7]/80'
@@ -1698,7 +1761,7 @@ function HomeContent() {
             }`}
           >
             {/* Header Drawer */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-black/[0.04] dark:border-white/[0.06]">
+            <div className={`flex items-center justify-between px-4 py-2.5 border-b ${isDarkMode ? 'border-white/[0.06]' : 'border-black/[0.04]'}`}>
               <span className="text-[15px] font-semibold tracking-[-0.374px]">Notes</span>
               <button
                 type="button"
@@ -1716,7 +1779,7 @@ function HomeContent() {
             <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-2 space-y-2.5">
               {/* Section 1: Halaman (Catatan Utama & Sampah) */}
               <div>
-                <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#86868b] mb-1">
+                <p className={`px-2 text-[10px] font-semibold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
                   {t('Halaman')}
                 </p>
                 <div className="space-y-1">
@@ -1792,7 +1855,7 @@ function HomeContent() {
 
               {/* Section 2: Pengaturan Akun */}
               <div>
-                <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#86868b] mb-1">
+                <p className={`px-2 text-[10px] font-semibold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
                   {t('Akun & Preferensi')}
                 </p>
                 <div className="space-y-1">
@@ -1832,7 +1895,7 @@ function HomeContent() {
 
               {/* Section 3: Paket Premium / Free yang sedang aktif */}
               <div>
-                <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#86868b] mb-1">
+                <p className={`px-2 text-[10px] font-semibold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
                   {t('Paket Langganan')}
                 </p>
                 <div
@@ -1860,7 +1923,7 @@ function HomeContent() {
                       {isPremium ? t('Aktif') : t('Standar')}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-[11px] text-[#7a7a7a] dark:text-[#86868b] leading-tight">
+                  <p className={`mt-0.5 text-[11px] leading-tight ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
                     {isPremium
                       ? t('Folder tak terbatas & kolaborasi aktif.')
                       : t('Maksimal 1 folder.')}
@@ -1889,7 +1952,7 @@ function HomeContent() {
 
               {/* Section 4: Pengaturan Tema Terang atau Gelap */}
               <div>
-                <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] dark:text-[#86868b] mb-1">
+                <p className={`px-2 text-[10px] font-semibold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
                   {t('Tampilan')}
                 </p>
                 <div
@@ -1926,7 +1989,7 @@ function HomeContent() {
             </div>
 
             {/* Footer Profil Pengguna ala Apple di Bawah Page List */}
-            <div className="p-3 border-t border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02]">
+            <div className={`p-3 border-t ${isDarkMode ? 'border-white/[0.08] bg-white/[0.02]' : 'border-black/[0.06] bg-black/[0.02]'}`}>
               <button
                 type="button"
                 onClick={() => {
@@ -1948,7 +2011,9 @@ function HomeContent() {
                     width={38}
                     height={38}
                     unoptimized
-                    className="h-9.5 w-9.5 shrink-0 rounded-full object-cover border border-black/10 dark:border-white/15 shadow-sm"
+                    className={`h-9.5 w-9.5 shrink-0 rounded-full object-cover border shadow-sm ${
+                      isDarkMode ? 'border-white/15' : 'border-black/10'
+                    }`}
                   />
                 ) : (
                   <span className={`flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold shadow-sm ${
@@ -1977,7 +2042,7 @@ function HomeContent() {
       )}
 
       {/* Content Area */}
-      <main data-dashboard-main data-motion-content className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 pb-28 sm:px-6 sm:py-8 sm:pb-28 md:px-12">
+      <main data-dashboard-main data-motion-content className="mx-auto w-full max-w-[1440px] flex-1 px-4 pt-9 pb-28 sm:px-6 sm:py-8 sm:pb-28 md:px-12">
         {premiumMessage && (
           <div role="status" className="mb-5 flex items-center justify-between gap-4 rounded-[11px] border border-[#e0e0e0] bg-white px-4 py-3 text-[14px] text-[#1d1d1f]">
             <span>{premiumMessage}</span>
@@ -1985,39 +2050,294 @@ function HomeContent() {
           </div>
         )}
 
-        {activeTab === 'notes' && isPremium && (
-          <div className="mb-6 flex flex-wrap items-center gap-3">
-            <label className="sr-only" htmlFor="folder-filter">{t('Filter folder')}</label>
-            <select
-              id="folder-filter"
-              value={folderFilter}
-              onChange={(event) => setFolderFilter(event.target.value)}
-              className="h-11 min-w-40 rounded-full border border-[#e0e0e0] bg-white px-4 text-[14px] text-[#1d1d1f] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
-            >
-              <option value="all">{t('Semua catatan')}</option>
-              <option value="">{t('Tanpa folder')}</option>
-              {folders.map((folder) => <option key={folder.id} value={String(folder.id)}>{folder.name}</option>)}
-            </select>
-            {isCreatingFolder ? (
-              <form onSubmit={createFolder} className="flex flex-wrap items-center gap-2">
-                <input
-                  autoFocus
-                  required
-                  maxLength={80}
-                  aria-label={t('Nama folder baru')}
-                  value={folderName}
-                  onChange={(event) => setFolderName(event.target.value)}
-                  placeholder={t('Nama folder')}
-                  className="h-11 w-48 rounded-full border border-[#e0e0e0] bg-white px-4 text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
-                />
-                <button className="min-h-11 rounded-full bg-[#0066cc] px-4 text-[14px] text-white active:scale-95">{t('Buat')}</button>
-                <button type="button" onClick={() => setIsCreatingFolder(false)} className="min-h-11 rounded-full px-3 text-[14px] text-[#0066cc] active:scale-95">{t('Batal')}</button>
-              </form>
-            ) : (
-              <button onClick={() => setIsCreatingFolder(true)} className="min-h-11 rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] active:scale-95"><HiOutlinePlus aria-hidden="true" className="mr-1 inline-block align-middle" />{t('Folder')}</button>
+        {/* Header from Figma Wireframe: Title, Subtitle, PageList, Big Avatar, Search, Category/Folder Pills */}
+        <div className="mb-1 sm:mb-6">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h1 className={`text-[32px] sm:text-[38px] font-bold tracking-tight leading-none ${
+                isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
+              }`}>
+                {activeTab === 'notes' ? t('Catatan') : t('Sampah')}
+              </h1>
+              <p className={`mt-1.5 text-[13px] sm:text-[14px] ${
+                isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'
+              }`}>
+                {activeTab === 'notes'
+                  ? t('{count} catatan tersimpan', { count: filteredActiveNotes.length })
+                  : t('{count} catatan milikmu di tong sampah', { count: filteredTrashedNotes.length })}
+              </p>
+            </div>
+
+            {/* Mobile Header Actions: PageList + Big Avatar */}
+            <div className="flex items-center gap-2.5 sm:hidden">
+              {/* PageList Drawer Button on Mobile */}
+              <button
+                type="button"
+                aria-label={t('Buka Daftar Halaman & Menu')}
+                title={t('Daftar Halaman & Menu')}
+                onClick={handleOpenPageList}
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border shadow-sm transition-all active:scale-95 ${
+                  isDarkMode
+                    ? 'border-white/15 bg-[#252527] text-[#f5f5f7] hover:bg-white/10'
+                    : 'border-black/10 bg-white text-[#1d1d1f] hover:bg-black/5'
+                }`}
+              >
+                <HiOutlineMenuAlt2 aria-hidden="true" className="h-5 w-5" />
+              </button>
+
+              {/* Big Avatar Button on the right (Mobile only) */}
+              <div className="relative">
+                <button
+                  type="button"
+                  aria-label={t('Menu profil')}
+                  aria-expanded={isProfileMenuOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setIsProfileMenuOpen((open) => !open)}
+                  className="flex items-center rounded-full p-0.5 transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3]"
+                >
+                  {(profile?.avatar_url || user.user_metadata?.avatar_url) ? (
+                    <Image
+                      src={profile?.avatar_url || user.user_metadata.avatar_url}
+                      alt=""
+                      width={48}
+                      height={48}
+                      unoptimized
+                      className={`h-12 w-12 rounded-full object-cover border-2 shadow-sm ${
+                        isDarkMode ? 'border-white/20' : 'border-black/10'
+                      }`}
+                    />
+                  ) : (
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0066cc] text-white text-[18px] font-semibold shadow-sm">
+                      {(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                </button>
+
+              {/* Profile Menu Popover for Mobile */}
+              {profileMenuPresence.isPresent && (
+                <>
+                  <div
+                    className="fixed inset-0 z-50 bg-transparent"
+                    inert={profileMenuPresence.isExiting}
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    aria-hidden="true"
+                  />
+                  <div
+                    role="menu"
+                    data-motion-state={profileMenuPresence.isExiting ? 'closing' : 'open'}
+                    data-motion-kind="popover"
+                    inert={profileMenuPresence.isExiting}
+                    className={`motion-popover absolute right-0 top-[calc(100%+8px)] z-[55] w-64 rounded-[14px] border p-2 shadow-2xl backdrop-blur-2xl transition-all ${
+                      isDarkMode
+                        ? 'border-white/10 bg-[#252527]/95 text-[#f5f5f7] shadow-[0_12px_36px_rgba(0,0,0,0.6)]'
+                        : 'border-black/5 bg-white/95 text-[#1d1d1f] shadow-[0_12px_36px_rgba(0,0,0,0.15)]'
+                    }`}
+                  >
+                    <div className="px-3 py-2.5">
+                      <p className="truncate text-[15px] font-semibold tracking-[-0.2px]">
+                        {profile?.full_name || user.user_metadata?.full_name || t('Akun Notes')}
+                      </p>
+                      <p className={`truncate text-[13px] tracking-[-0.12px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
+                        {user.email}
+                      </p>
+                    </div>
+                    <div className={`my-1 h-px ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
+
+                    {isRoleGodUser && (
+                      <>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setIsProfileMenuOpen(false)
+                            handleOpenRoleGodAuth()
+                          }}
+                          className={`flex w-full min-h-[40px] items-center justify-between rounded-[10px] px-3 text-left text-[14px] font-medium transition-colors active:scale-95 ${
+                            isDarkMode
+                              ? 'text-[#ff375f] hover:bg-white/10'
+                              : 'text-[#d70015] hover:bg-black/5'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2.5">
+                            <KitsuneMaskIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                            <span>Switch to God Mode</span>
+                          </span>
+                          <span className="text-[12px] opacity-60">→</span>
+                        </button>
+                        <div className={`my-1 h-px ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
+                      </>
+                    )}
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsProfileMenuOpen(false)
+                        handleLogout()
+                      }}
+                      className={`flex w-full min-h-[40px] items-center gap-2 rounded-[10px] px-3 text-left text-[14px] font-normal transition-colors active:scale-95 ${
+                        isDarkMode
+                          ? 'text-[#ff453a] hover:bg-white/10'
+                          : 'text-[#ff3b30] hover:bg-black/5'
+                      }`}
+                    >
+                      <HiOutlineLogout aria-hidden="true" className="h-4 w-4" />
+                      <span>{t('Keluar')}</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            </div>
+          </div>
+
+          {/* Search bar matching wireframe [Q Cari catatan...] */}
+          <div className="relative mb-3.5 w-full max-w-xl">
+            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[17px] text-[#7a7a7a]">
+              <HiOutlineSearch aria-hidden="true" />
+            </span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('Cari catatan...')}
+              className={`h-11 w-full rounded-[14px] border pl-10 pr-9 text-[15px] outline-none transition-all placeholder:text-[#7a7a7a]/70 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${
+                isDarkMode
+                  ? 'border-white/10 bg-[#252527] text-[#f5f5f7] focus:bg-[#2c2c2e]'
+                  : 'border-[#e0e0e0] bg-[#fafafc] text-[#1d1d1f] focus:bg-white'
+              }`}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                aria-label={t('Tutup')}
+                onClick={() => setSearchQuery('')}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 text-[14px] ${
+                  isDarkMode ? 'text-[#86868b] hover:text-white' : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
+                }`}
+              >
+                <HiOutlineX aria-hidden="true" />
+              </button>
             )}
           </div>
-        )}
+
+          {/* Category / Folder filter pills matching wireframe [Semua] [Pribadi] [Kerja] [Ide]... */}
+          {activeTab === 'notes' && (
+            <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 pt-0.5 sm:mx-0 sm:px-0 no-scrollbar">
+              <button
+                type="button"
+                onClick={() => setFolderFilter('all')}
+                className={`h-9 shrink-0 rounded-full px-4 text-[13px] font-medium tracking-tight transition-all active:scale-95 ${
+                  folderFilter === 'all'
+                    ? isDarkMode
+                      ? 'bg-white text-[#1d1d1f] shadow-sm font-semibold'
+                      : 'bg-[#1d1d1f] text-white shadow-sm'
+                    : isDarkMode
+                      ? 'border border-white/10 bg-[#252527] text-[#86868b] hover:bg-[#2c2c2e] hover:text-[#f5f5f7]'
+                      : 'border border-[#e0e0e0] bg-white text-[#1d1d1f]/75 hover:bg-[#fafafc] hover:text-[#1d1d1f]'
+                }`}
+              >
+                {t('Semua')}
+              </button>
+
+              {folders.map((folder) => {
+                const isSelected = folderFilter === String(folder.id)
+                return (
+                  <button
+                    key={folder.id}
+                    type="button"
+                    onClick={() => setFolderFilter(String(folder.id))}
+                    className={`h-9 shrink-0 rounded-full px-4 text-[13px] font-medium tracking-tight transition-all active:scale-95 ${
+                      isSelected
+                        ? isDarkMode
+                          ? 'bg-white text-[#1d1d1f] shadow-sm font-semibold'
+                          : 'bg-[#1d1d1f] text-white shadow-sm'
+                        : isDarkMode
+                          ? 'border border-white/10 bg-[#252527] text-[#86868b] hover:bg-[#2c2c2e] hover:text-[#f5f5f7]'
+                          : 'border border-[#e0e0e0] bg-white text-[#1d1d1f]/75 hover:bg-[#fafafc] hover:text-[#1d1d1f]'
+                    }`}
+                  >
+                    {folder.name}
+                  </button>
+                )
+              })}
+
+              <button
+                type="button"
+                onClick={() => setFolderFilter('')}
+                className={`h-9 shrink-0 rounded-full px-4 text-[13px] font-medium tracking-tight transition-all active:scale-95 ${
+                  folderFilter === ''
+                    ? isDarkMode
+                      ? 'bg-white text-[#1d1d1f] shadow-sm font-semibold'
+                      : 'bg-[#1d1d1f] text-white shadow-sm'
+                    : isDarkMode
+                      ? 'border border-white/10 bg-[#252527] text-[#86868b] hover:bg-[#2c2c2e] hover:text-[#f5f5f7]'
+                      : 'border border-[#e0e0e0] bg-white text-[#1d1d1f]/75 hover:bg-[#fafafc] hover:text-[#1d1d1f]'
+                }`}
+              >
+                {t('Tanpa folder')}
+              </button>
+
+              {isPremium && (
+                isCreatingFolder ? (
+                  <form onSubmit={createFolder} className="flex shrink-0 items-center gap-1.5">
+                    <input
+                      autoFocus
+                      required
+                      maxLength={80}
+                      aria-label={t('Nama folder baru')}
+                      value={folderName}
+                      onChange={(event) => setFolderName(event.target.value)}
+                      placeholder={t('Nama folder')}
+                      className={`h-9 w-36 rounded-full border px-3.5 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3] ${
+                        isDarkMode
+                          ? 'border-white/15 bg-[#252527] text-[#f5f5f7]'
+                          : 'border-[#e0e0e0] bg-white text-[#1d1d1f]'
+                      }`}
+                    />
+                    <button type="submit" className="h-9 rounded-full bg-[#0066cc] px-3.5 text-[13px] font-medium text-white active:scale-95">{t('Buat')}</button>
+                    <button type="button" onClick={() => setIsCreatingFolder(false)} className="h-9 rounded-full px-2.5 text-[13px] text-[#0066cc] active:scale-95">{t('Batal')}</button>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingFolder(true)}
+                    className="flex h-9 shrink-0 items-center gap-1 rounded-full border border-dashed border-[#0066cc]/50 px-3.5 text-[13px] font-medium text-[#0066cc] hover:bg-[#0066cc]/5 active:scale-95 transition-all"
+                  >
+                    <HiOutlinePlus aria-hidden="true" />
+                    <span>{t('Folder')}</span>
+                  </button>
+                )
+              )}
+            </div>
+          )}
+
+          {/* Subheader: Active filter name on left + Sort toggle on right (matching wireframe) */}
+          <div className="flex items-center justify-between pt-3.5 pb-1 sm:pt-1 sm:pb-3">
+            <span className={`text-[14px] font-semibold ${
+              isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
+            }`}>
+              {folderFilter === 'all'
+                ? t('Semua catatan')
+                : folderFilter === ''
+                  ? t('Tanpa folder')
+                  : folders.find((f) => String(f.id) === folderFilter)?.name ?? t('Semua catatan')}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => setSortOrder((prev) => (prev === 'newest' ? 'oldest' : 'newest'))}
+              className={`flex items-center gap-1 text-[13px] active:scale-95 transition-colors ${
+                isDarkMode ? 'text-[#86868b] hover:text-[#f5f5f7]' : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
+              }`}
+            >
+              <span>{sortOrder === 'newest' ? t('Terbaru') : t('Terlama')}</span>
+              <span className={`text-[10px] transition-transform ${sortOrder === 'oldest' ? 'rotate-180' : ''}`}>
+                <HiOutlineChevronDown aria-hidden="true" />
+              </span>
+            </button>
+          </div>
+        </div>
 
         {/* Note editor modal */}
         {isMounted && isFormOpen && !deletedNoteIds.has(editingNoteId ?? -1) && activeTab === 'notes' && createPortal(
@@ -2194,109 +2514,257 @@ function HomeContent() {
         {/* TAB 1: UTAMA (Active Notes) */}
         {activeTab === 'notes' && (
           <div key="notes-tab" className="animate-tab-enter">
-            {activeNotes.length === 0 && deletionNotices.length === 0 ? (
+            {deletionNotices.length > 0 && (
+              <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
+                {deletionNotices.map((notice) => (
+                  <DeletedNoteCard key={notice.id} notice={notice} isDark={isDarkMode} onDismiss={dismissDeletionNotice} />
+                ))}
+              </div>
+            )}
+
+            {filteredActiveNotes.length === 0 && deletionNotices.length === 0 ? (
               <div className="text-center py-20 text-[#7a7a7a]">
                 <p className="text-[21px] font-semibold mb-2">{t('Belum ada catatan')}</p>
                 <p className="text-[17px]">{t('Klik "{button}" di kanan bawah untuk mulai menulis.', { button: t('New Notes') })}</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
-                {deletionNotices.map((notice) => (
-                  <DeletedNoteCard key={notice.id} notice={notice} isDark={isDarkMode} onDismiss={dismissDeletionNotice} />
-                ))}
-                {activeNotes.map((note, index) => (
-                  <article
-                    key={note.id}
-                    style={{ backgroundColor: getAccentSurface(note.accent_color || '#ffffff'), animationDelay: `${Math.min(index, 7) * 30}ms` }}
-                    data-note-card
-                    role="button"
-                    tabIndex={0}
-                    aria-label={t('Buka catatan {name}', { name: note.title || t('Tanpa Judul') })}
-                    onClick={() => handleNoteCardClick(note)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        handleNoteCardClick(note)
-                      }
-                    }}
-                    className="relative group flex min-w-0 cursor-pointer flex-col justify-between rounded-[18px] border border-[#e0e0e0] p-5 transition-all duration-200 hover:border-[#0066cc]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0071e3] sm:p-6"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between mb-2 gap-2">
-                        <h3 className="min-w-0 flex-1 truncate text-[17px] font-semibold text-[#1d1d1f] tracking-[-0.374px]">
-                          {note.title || t('Tanpa Judul')}
-                        </h3>
-                        {/* Pin Button */}
-                        {note.user_id === user.id && <button
-                          aria-label={note.is_pinned ? t('Lepas pin catatan') : t('Pin catatan')}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            togglePin(note)
-                          }}
-                          className={`min-h-11 px-3 py-1 rounded-full text-xs transition-all ${
-                            note.is_pinned
-                              ? 'bg-[#0066cc] text-white'
-                              : 'bg-black/5 text-[#7a7a7a] sm:opacity-0 sm:group-hover:opacity-100'
-                          } ${pinAnimation?.id === note.id ? (pinAnimation.pinning ? 'animate-pin-on' : 'animate-pin-off') : ''}`}
-                        >
-                          <span aria-hidden="true" className="mr-1 inline-block">{note.is_pinned ? <BsPinFill aria-hidden="true" /> : <BsPin aria-hidden="true" />}</span>
-                          {note.is_pinned ? t('Disematkan') : t('Sematkan')}
-                        </button>}
-                      </div>
+              <>
+                {/* 1. Mobile List View (Spacious Apple Cards) */}
+                <div className="block sm:hidden space-y-4">
+                  {filteredActiveNotes.map((note) => {
+                    const folder = folders.find((f) => f.id === note.folder_id)
+                    return (
+                      <article
+                        key={note.id}
+                        style={{ backgroundColor: getAccentSurface(note.accent_color || '#ffffff') }}
+                        data-note-card
+                        role="button"
+                        tabIndex={0}
+                        aria-label={t('Buka catatan {name}', { name: note.title || t('Tanpa Judul') })}
+                        onClick={() => handleNoteCardClick(note)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            handleNoteCardClick(note)
+                          }
+                        }}
+                        className={`group flex flex-col justify-between rounded-[18px] border p-5 cursor-pointer active:scale-[0.98] transition-all duration-150 ${
+                          isDarkMode ? 'border-white/10' : 'border-[#e0e0e0]'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <h3 className={`min-w-0 flex-1 truncate text-[17px] font-semibold tracking-[-0.374px] ${
+                              isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
+                            }`}>
+                              {note.title || t('Tanpa Judul')}
+                            </h3>
+                            {note.is_pinned && (
+                              note.user_id === user.id ? (
+                                <button
+                                  type="button"
+                                  aria-label={t('Lepas pin catatan')}
+                                  title={t('Lepas pin catatan')}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    togglePin(note)
+                                  }}
+                                  className="shrink-0 -mr-1 -mt-1 flex h-8 w-8 items-center justify-center rounded-full text-[#0066cc] active:scale-90 transition-transform"
+                                >
+                                  <BsPinFill aria-hidden="true" className="h-4 w-4" />
+                                </button>
+                              ) : (
+                                <span className="shrink-0 text-[#0066cc] text-[14px] pt-0.5" title={t('Disematkan')}>
+                                  <BsPinFill aria-hidden="true" />
+                                </span>
+                              )
+                            )}
+                          </div>
 
-                      <p className="text-[17px] text-[#1d1d1f]/80 leading-[1.47] line-clamp-4 mb-6 whitespace-pre-wrap">
-                        {note.content || t('Gak ada isi teks...')}
-                      </p>
-                    </div>
+                          <p className={`text-[15px] leading-[1.5] line-clamp-3 whitespace-pre-wrap ${
+                            isDarkMode ? 'text-[#f5f5f7]/75' : 'text-[#1d1d1f]/75'
+                          }`}>
+                            {note.content || t('Gak ada isi teks...')}
+                          </p>
+                        </div>
 
-                    <div className="flex flex-col gap-2 border-t border-black/5 pt-3 text-[12px] text-[#7a7a7a] sm:flex-row sm:items-center sm:justify-between">
+                        <div className={`mt-4 flex items-center justify-between border-t pt-3 text-[12px] ${
+                          isDarkMode ? 'border-white/[0.08] text-[#86868b]' : 'border-black/[0.06] text-[#7a7a7a]'
+                        }`}>
+                          <div className="flex items-center gap-1.5 truncate">
+                            {folder && (
+                              <>
+                                <span className={`font-medium ${isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'}`}>{folder.name}</span>
+                                <span>·</span>
+                              </>
+                            )}
+                            <span>{formatNoteDate(note.updated_at || note.created_at)}</span>
+
+                            {notePeopleById[note.id]?.length ? (
+                              <div className="ml-2 flex -space-x-1">
+                                {(notePeopleById[note.id] ?? []).slice(0, 3).map((person) => (
+                                  <span
+                                    key={person.user_id}
+                                    title={person.full_name || t('Pengguna note')}
+                                    className={`flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border text-[9px] ${
+                                      isDarkMode ? 'border-[#1d1d1f] bg-[#252527] text-[#f5f5f7]' : 'border-white bg-[#f5f5f7] text-[#1d1d1f]'
+                                    }`}
+                                  >
+                                    {person.avatar_url ? (
+                                      <Image src={person.avatar_url} alt="" width={20} height={20} unoptimized className="h-full w-full object-cover" />
+                                    ) : (
+                                      (person.full_name || '?').slice(0, 1).toUpperCase()
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {note.user_id === user.id && (
+                              <button
+                                type="button"
+                                aria-label={note.is_pinned ? t('Lepas pin catatan') : t('Pin catatan')}
+                                title={note.is_pinned ? t('Lepas pin catatan') : t('Pin catatan')}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  togglePin(note)
+                                }}
+                                className={`flex h-8 w-8 items-center justify-center rounded-full transition-transform active:scale-95 ${
+                                  note.is_pinned
+                                    ? 'text-[#0066cc]'
+                                    : isDarkMode
+                                      ? 'text-[#86868b] hover:text-[#f5f5f7]'
+                                      : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
+                                }`}
+                              >
+                                {note.is_pinned ? <BsPinFill className="h-4 w-4" aria-hidden="true" /> : <BsPin className="h-4 w-4" aria-hidden="true" />}
+                              </button>
+                            )}
+                            {note.user_id === user.id ? (
+                              <button
+                                type="button"
+                                aria-label={t('Buang')}
+                                title={t('Buang')}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  setConfirmation({ action: 'trash', note })
+                                }}
+                                className={`flex h-8 w-8 items-center justify-center rounded-full active:scale-95 transition-all ${
+                                  isDarkMode
+                                    ? 'text-[#86868b] hover:text-[#ff453a] hover:bg-white/10'
+                                    : 'text-[#7a7a7a] hover:text-[#ff3b30] hover:bg-black/5'
+                                }`}
+                              >
+                                <HiOutlineTrash aria-hidden="true" className="h-4 w-4" />
+                              </button>
+                            ) : (
+                              <span className={`text-[11px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>{t('Dibagikan')}</span>
+                            )}
+                          </div>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </div>
+
+                {/* 2. Desktop Grid View (Existing Apple Utility Cards Grid) */}
+                <div className="hidden sm:grid sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
+                  {filteredActiveNotes.map((note, index) => (
+                    <article
+                      key={note.id}
+                      style={{ backgroundColor: getAccentSurface(note.accent_color || '#ffffff'), animationDelay: `${Math.min(index, 7) * 30}ms` }}
+                      data-note-card
+                      role="button"
+                      tabIndex={0}
+                      aria-label={t('Buka catatan {name}', { name: note.title || t('Tanpa Judul') })}
+                      onClick={() => handleNoteCardClick(note)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          handleNoteCardClick(note)
+                        }
+                      }}
+                      className="relative group flex min-w-0 cursor-pointer flex-col justify-between rounded-[18px] border border-[#e0e0e0] p-5 transition-all duration-200 hover:border-[#0066cc]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0071e3] sm:p-6"
+                    >
                       <div>
-                        <div>{t('Dibuat: {date}', { date: formatDate(note.created_at) })}</div>
-                        <div>{t('Edit: {date}', { date: formatDate(note.updated_at) })}</div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-1 self-end sm:self-auto sm:gap-2">
-                        {note.user_id === user.id ? (
-                          <button
+                        <div className="flex items-start justify-between mb-2 gap-2">
+                          <h3 className="min-w-0 flex-1 truncate text-[17px] font-semibold text-[#1d1d1f] tracking-[-0.374px]">
+                            {note.title || t('Tanpa Judul')}
+                          </h3>
+                          {/* Pin Button */}
+                          {note.user_id === user.id && <button
+                            aria-label={note.is_pinned ? t('Lepas pin catatan') : t('Pin catatan')}
                             onClick={(event) => {
                               event.stopPropagation()
-                              setConfirmation({ action: 'trash', note })
+                              togglePin(note)
                             }}
-                            className="min-h-11 px-2 text-[#0066cc] hover:underline"
+                            className={`min-h-11 px-3 py-1 rounded-full text-xs transition-all ${
+                              note.is_pinned
+                                ? 'bg-[#0066cc] text-white'
+                                : 'bg-black/5 text-[#7a7a7a] sm:opacity-0 sm:group-hover:opacity-100'
+                            } ${pinAnimation?.id === note.id ? (pinAnimation.pinning ? 'animate-pin-on' : 'animate-pin-off') : ''}`}
                           >
-                            {t('Buang')}
-                          </button>
-                        ) : (
-                          <div className="flex min-h-11 items-center gap-2 px-2">
-                            <span className="text-[12px] text-[#7a7a7a]">{t('Dibagikan')}</span>
-                            <div
-                              className="flex items-center pl-1"
-                              aria-label={t('Dibagikan oleh {name}', { name: notePeopleById[note.id]?.map((person) => person.full_name || t('pengguna')).join(', ') || t('pemilik catatan') })}
-                            >
-                              {(notePeopleById[note.id] ?? []).slice(0, 4).map((person) => (
-                                <span
-                                  key={person.user_id}
-                                  title={person.full_name || t('Pengguna note')}
-                                  className="-ml-1 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#f5f5f7] text-[10px] text-[#1d1d1f] first:ml-0"
-                                >
-                                  {person.avatar_url
-                                    ? <Image src={person.avatar_url} alt={person.full_name || t('Foto profil')} width={28} height={28} unoptimized className="h-full w-full object-cover" />
-                                    : (person.full_name || '?').slice(0, 1).toUpperCase()}
-                                </span>
-                              ))}
-                              {(notePeopleById[note.id]?.length ?? 0) > 4 && (
-                                <span className="-ml-1 flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-white bg-[#f5f5f7] px-1 text-[9px] text-[#1d1d1f]">
-                                  +{(notePeopleById[note.id]?.length ?? 0) - 4}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        )}
+                            <span aria-hidden="true" className="mr-1 inline-block">{note.is_pinned ? <BsPinFill aria-hidden="true" /> : <BsPin aria-hidden="true" />}</span>
+                            {note.is_pinned ? t('Disematkan') : t('Sematkan')}
+                          </button>}
+                        </div>
+
+                        <p className="text-[17px] text-[#1d1d1f]/80 leading-[1.47] line-clamp-4 mb-6 whitespace-pre-wrap">
+                          {note.content || t('Gak ada isi teks...')}
+                        </p>
                       </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
+
+                      <div className="flex flex-col gap-2 border-t border-black/5 pt-3 text-[12px] text-[#7a7a7a] sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <div>{t('Dibuat: {date}', { date: formatDate(note.created_at) })}</div>
+                          <div>{t('Edit: {date}', { date: formatDate(note.updated_at) })}</div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1 self-end sm:self-auto sm:gap-2">
+                          {note.user_id === user.id ? (
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setConfirmation({ action: 'trash', note })
+                              }}
+                              className="min-h-11 px-2 text-[#0066cc] hover:underline"
+                            >
+                              {t('Buang')}
+                            </button>
+                          ) : (
+                            <div className="flex min-h-11 items-center gap-2 px-2">
+                              <span className="text-[12px] text-[#7a7a7a]">{t('Dibagikan')}</span>
+                              <div
+                                className="flex items-center pl-1"
+                                aria-label={t('Dibagikan oleh {name}', { name: notePeopleById[note.id]?.map((person) => person.full_name || t('pengguna')).join(', ') || t('pemilik catatan') })}
+                              >
+                                {(notePeopleById[note.id] ?? []).slice(0, 4).map((person) => (
+                                  <span
+                                    key={person.user_id}
+                                    title={person.full_name || t('Pengguna note')}
+                                    className="-ml-1 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#f5f5f7] text-[10px] text-[#1d1d1f] first:ml-0"
+                                  >
+                                    {person.avatar_url
+                                      ? <Image src={person.avatar_url} alt={person.full_name || t('Foto profil')} width={28} height={28} unoptimized className="h-full w-full object-cover" />
+                                      : (person.full_name || '?').slice(0, 1).toUpperCase()}
+                                  </span>
+                                ))}
+                                {(notePeopleById[note.id]?.length ?? 0) > 4 && (
+                                  <span className="-ml-1 flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-white bg-[#f5f5f7] px-1 text-[9px] text-[#1d1d1f]">
+                                    +{(notePeopleById[note.id]?.length ?? 0) - 4}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}
@@ -2316,51 +2784,102 @@ function HomeContent() {
                 </button>
               </div>
             )}
-            {trashedNotes.length === 0 ? (
+            {filteredTrashedNotes.length === 0 ? (
               <div className="text-center py-20 text-[#7a7a7a]">
                 <p className="text-[21px] font-semibold mb-2">{t('Tong sampah kosong')}</p>
                 <p className="text-[17px]">{t('Tidak ada catatan yang dibuang.')}</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
-                {trashedNotes.map((note, index) => (
-                  <div
-                    key={note.id}
-                    style={{ backgroundColor: getAccentSurface(note.accent_color || '#ffffff'), animationDelay: `${Math.min(index, 7) * 30}ms` }}
-                    data-note-card
-                    className="flex min-w-0 flex-col justify-between rounded-[18px] border border-[#e0e0e0] bg-[#ffffff] p-5 opacity-80 sm:p-6"
-                  >
-                    <div>
-                      <h3 className="text-[17px] font-semibold text-[#1d1d1f] mb-2 line-clamp-1">
-                        {note.title || t('Tanpa Judul')}
-                      </h3>
-                      <p className="text-[17px] text-[#7a7a7a] line-clamp-3 mb-4">
-                        {note.content}
-                      </p>
-                    </div>
+              <>
+                {/* 1. Mobile Trashed List View (Spacious Apple Cards) */}
+                <div className="block sm:hidden space-y-4">
+                  {filteredTrashedNotes.map((note) => (
+                    <article
+                      key={note.id}
+                      data-note-card
+                      style={{ backgroundColor: getAccentSurface(note.accent_color || '#ffffff') }}
+                      className={`flex flex-col justify-between rounded-[18px] border p-5 opacity-80 ${
+                        isDarkMode ? 'border-white/10' : 'border-[#e0e0e0]'
+                      }`}
+                    >
+                      <div>
+                        <h3 className={`truncate text-[17px] font-semibold ${
+                          isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
+                        }`}>
+                          {note.title || t('Tanpa Judul')}
+                        </h3>
+                        <p className={`mt-2 text-[15px] leading-[1.5] line-clamp-3 whitespace-pre-wrap ${
+                          isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'
+                        }`}>
+                          {note.content || t('Gak ada isi teks...')}
+                        </p>
+                      </div>
+                      <div className={`mt-4 flex items-center justify-between border-t pt-3 text-[12px] ${
+                        isDarkMode ? 'border-white/[0.08]' : 'border-black/[0.06]'
+                      }`}>
+                        <span className={isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}>{t('Dibuang')}</span>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => toggleTrash(note)}
+                            className="font-normal text-[#0066cc] hover:underline active:scale-95"
+                          >
+                            {t('Pulihkan')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmation({ action: 'delete', note })}
+                            className="font-normal text-[#ff3b30] hover:underline active:scale-95"
+                          >
+                            {t('Hapus Permanen')}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
 
-                    <div className="flex flex-col gap-2 border-t border-[#f0f0f0] pt-3 text-[12px] sm:flex-row sm:items-center sm:justify-between">
-                      <span className="text-[#7a7a7a]">{t('Dibuang')}</span>
-                      <div className="flex flex-wrap gap-x-2 gap-y-1 self-end sm:self-auto sm:gap-3">
-                        <button
-                          type="button"
-                          onClick={() => toggleTrash(note)}
-                          className="min-h-11 px-2 font-normal text-[#0066cc] hover:underline active:scale-95"
-                        >
-                          {t('Pulihkan')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmation({ action: 'delete', note })}
-                          className="min-h-11 px-2 font-normal text-[#0066cc] hover:underline active:scale-95"
-                        >
-                          {t('Hapus Permanen')}
-                        </button>
+                {/* 2. Desktop Trashed Grid View */}
+                <div className="hidden sm:grid sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
+                  {filteredTrashedNotes.map((note, index) => (
+                    <div
+                      key={note.id}
+                      style={{ backgroundColor: getAccentSurface(note.accent_color || '#ffffff'), animationDelay: `${Math.min(index, 7) * 30}ms` }}
+                      data-note-card
+                      className="flex min-w-0 flex-col justify-between rounded-[18px] border border-[#e0e0e0] bg-[#ffffff] p-5 opacity-80 sm:p-6"
+                    >
+                      <div>
+                        <h3 className="text-[17px] font-semibold text-[#1d1d1f] mb-2 line-clamp-1">
+                          {note.title || t('Tanpa Judul')}
+                        </h3>
+                        <p className="text-[17px] text-[#7a7a7a] line-clamp-3 mb-4">
+                          {note.content}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col gap-2 border-t border-[#f0f0f0] pt-3 text-[12px] sm:flex-row sm:items-center sm:justify-between">
+                        <span className="text-[#7a7a7a]">{t('Dibuang')}</span>
+                        <div className="flex flex-wrap gap-x-2 gap-y-1 self-end sm:self-auto sm:gap-3">
+                          <button
+                            type="button"
+                            onClick={() => toggleTrash(note)}
+                            className="min-h-11 px-2 font-normal text-[#0066cc] hover:underline active:scale-95"
+                          >
+                            {t('Pulihkan')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmation({ action: 'delete', note })}
+                            className="min-h-11 px-2 font-normal text-[#0066cc] hover:underline active:scale-95"
+                          >
+                            {t('Hapus Permanen')}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}
