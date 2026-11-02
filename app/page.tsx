@@ -98,15 +98,7 @@ function HomeContent() {
   const [folderName, setFolderName] = useState('')
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [premiumMessage, setPremiumMessage] = useState('')
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
-  const [authName, setAuthName] = useState('')
-  const [authEmail, setAuthEmail] = useState('')
-  const [authPassword, setAuthPassword] = useState('')
-  const [showAuthPassword, setShowAuthPassword] = useState(false)
   const [authMessage, setAuthMessage] = useState('')
-  const [verificationEmail, setVerificationEmail] = useState('')
-  const [isResendingVerification, setIsResendingVerification] = useState(false)
-  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false)
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [isPageListOpen, setIsPageListOpen] = useState(false)
   const [isPageListClosing, setIsPageListClosing] = useState(false)
@@ -158,7 +150,7 @@ function HomeContent() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [pinAnimation, setPinAnimation] = useState<{ id: number; pinning: boolean } | null>(null)
   const [confirmation, setConfirmation] = useState<{
-    action: 'trash' | 'delete' | 'deleteAll'
+    action: 'trash' | 'delete' | 'deleteAll' | 'leave'
     note?: Note
     count?: number
   } | null>(null)
@@ -330,8 +322,6 @@ function HomeContent() {
       if (scope !== accountScopeRef.current || version !== notesFetchVersionRef.current) return
       if (peopleError) {
         console.error('Error fetching note collaborator profiles:', peopleError.message)
-        setNotePeopleById({})
-        return
       }
 
       const peopleById = new Map((people ?? []).map((person) => [person.id, person]))
@@ -343,13 +333,13 @@ function HomeContent() {
             .filter((member) => member.note_id === note.id)
             .flatMap((member) => [member.user_id, member.invited_by]),
         ])]
-        peopleByNote[note.id] = noteMemberIds.flatMap((memberId) => {
+        peopleByNote[note.id] = noteMemberIds.map((memberId) => {
           const person = peopleById.get(memberId)
-          return person ? [{
-            user_id: person.id,
-            full_name: person.full_name,
-            avatar_url: person.avatar_url,
-          }] : []
+          return {
+            user_id: memberId,
+            full_name: person?.full_name || '',
+            avatar_url: person?.avatar_url || null,
+          }
         })
       }
       setNotePeopleById(peopleByNote)
@@ -564,52 +554,6 @@ function HomeContent() {
     if (error) setAuthMessage(error.message)
   }
 
-  const handleEmailAuth = async (event: React.FormEvent) => {
-    event.preventDefault()
-    setIsAuthSubmitting(true)
-    setAuthMessage('')
-    setVerificationEmail('')
-
-    const result = authMode === 'register'
-      ? await supabase.auth.signUp({
-          email: authEmail,
-          password: authPassword,
-          options: { data: { full_name: authName.trim() } },
-        })
-      : await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword })
-
-    if (result.error) {
-      const errorMessage = result.error.message
-      setAuthMessage(errorMessage.toLowerCase().includes('email rate limit exceeded')
-        ? t('Batas pengiriman email Supabase sedang tercapai. Permintaan daftar ini ditolak, jadi akun kemungkinan belum dibuat. Tunggu sampai batas pulih, lalu coba sekali lagi.')
-        : errorMessage)
-    } else if (authMode === 'register' && !result.data.session) {
-      setVerificationEmail(authEmail.trim())
-      setAuthMessage(t('Akun berhasil dibuat. Periksa email untuk konfirmasi sebelum masuk.'))
-    }
-    setIsAuthSubmitting(false)
-  }
-
-  const resendSignupVerification = async () => {
-    const email = verificationEmail || authEmail.trim()
-    if (!email) {
-      setAuthMessage(t('Masukkan email yang digunakan saat mendaftar.'))
-      return
-    }
-
-    setIsResendingVerification(true)
-    setAuthMessage('')
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/` },
-    })
-    setAuthMessage(error
-      ? t('Email verifikasi belum dapat dikirim: {error}', { error: error.message })
-      : t('Permintaan kirim ulang untuk {email} berhasil. Periksa Inbox dan folder Spam.', { email }))
-    setIsResendingVerification(false)
-  }
-
   const handleLogout = async () => {
     await supabase.auth.signOut()
   }
@@ -774,6 +718,38 @@ function HomeContent() {
       if (!invited || members.some((member) => member.user_id === invited.user_id)) return members
       return [...members, invited]
     })
+    void fetchNotes(user.id)
+  }
+
+  const handleRemoveCollaborator = async (targetUserId: string) => {
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    if (!user || scope.userId !== user.id || !editingNoteId) return
+    const currentNote = notes.find((item) => item.id === editingNoteId)
+    if (!currentNote || currentNote.user_id !== user.id) return
+    const confirmed = window.confirm(t('Hapus kolaborator ini dari catatan?'))
+    if (!confirmed) return
+
+    try {
+      const { error } = await supabase
+        .from('note_members')
+        .delete()
+        .eq('note_id', editingNoteId)
+        .eq('user_id', targetUserId)
+
+      if (scope !== accountScopeRef.current || editorVersion !== editorVersionRef.current) return
+      if (error) {
+        setSharingMessage(t('Gagal menghapus kolaborator: {error}', { error: error.message }))
+      } else {
+        setSharingMessage(t('Kolaborator berhasil dihapus.'))
+        setNoteMembers((current) => current.filter((m) => m.user_id !== targetUserId))
+        void fetchNotes(user.id)
+      }
+    } catch (err: unknown) {
+      if (scope === accountScopeRef.current && editorVersion === editorVersionRef.current) {
+        setSharingMessage(err instanceof Error ? err.message : t('Terjadi kesalahan'))
+      }
+    }
   }
 
   // 3. CRUD & Feature Handlers
@@ -784,25 +760,25 @@ function HomeContent() {
     if (!user || scope.userId !== user.id || (editingNoteId && deletedNoteIdsRef.current.has(editingNoteId))) return false
     if (!draft.title.trim() && !draft.content.trim()) return false
     setSaveStatus('saving')
+    const allowFolder = typeof isPremium === 'undefined' || isPremium
+    const parsedFolderId = (allowFolder && draft.folderId && !isNaN(Number(draft.folderId))) ? Number(draft.folderId) : null
     const payload = {
       title: draft.title,
       content: draft.content,
       accent_color: draft.accentColor,
-      folder_id: draft.folderId ? Number(draft.folderId) : null,
+      folder_id: parsedFolderId,
       updated_at: new Date().toISOString(),
     }
     try {
-      const { data, error } = editingNoteId !== null
-        ? await supabase.from('notes').update(payload).eq('id', editingNoteId).select('id').maybeSingle()
-        : await supabase.from('notes').insert({ ...payload, user_id: user.id }).select('id').single()
-      if (!isCurrent()) return false
-      if (error) {
-        setSaveStatus('error')
-        return false
-      }
-      if (!data) {
-        // A successful zero-row UPDATE confirms access is gone, unlike a network error.
-        if (editingNoteId !== null) {
+      if (editingNoteId !== null) {
+        const { data, error } = await supabase.from('notes').update(payload).eq('id', editingNoteId).select('id').maybeSingle()
+        if (!isCurrent()) return false
+        if (error) {
+          setSaveStatus('error')
+          return false
+        }
+        if (!data) {
+          // A successful zero-row UPDATE confirms access is gone, unlike a network error.
           deletedNoteIdsRef.current.add(editingNoteId)
           setNotes((current) => current.filter((note) => note.id !== editingNoteId))
           const missingVersion = ++editorVersionRef.current
@@ -814,7 +790,7 @@ function HomeContent() {
           setSelectedFolderId('')
           setAccentColor('#ffffff')
           setIsFolderMenuOpen(false)
-        setIsFilterFolderOpen(false)
+          setIsFilterFolderOpen(false)
           setNoteMembers([])
           setOnlineMembers([])
           setInviteEmail('')
@@ -824,12 +800,47 @@ function HomeContent() {
             .select('id, note_id, user_id, deleted_at').eq('user_id', user.id).eq('note_id', editingNoteId).maybeSingle()
           if (scope !== accountScopeRef.current || missingVersion !== editorVersionRef.current) return false
           if (notice) setDeletionNotices((current) => [notice, ...current.filter((item) => item.note_id !== editingNoteId)])
+          setSaveStatus('error')
+          return false
         }
-        setSaveStatus('error')
-        return false
+        if (deletedNoteIdsRef.current.has(editingNoteId)) return false
+      } else {
+        const insertPayload = {
+          ...payload,
+          user_id: user.id,
+          is_pinned: false,
+          is_trashed: false,
+        }
+        const { data, error } = await supabase.from('notes').insert(insertPayload).select('id').maybeSingle()
+        if (!isCurrent()) return false
+        let createdId: number | null = data?.id ?? null
+
+        if (error) {
+          // If .select('id') failed due to RLS RETURNING restriction, fallback to plain insert
+          const { error: directError } = await supabase.from('notes').insert(insertPayload)
+          if (!isCurrent()) return false
+          if (directError) {
+            console.error('Failed to create note:', directError.message)
+            setSaveStatus('error')
+            return false
+          }
+        }
+
+        if (!createdId) {
+          const { data: latest } = await supabase
+            .from('notes')
+            .select('id')
+            .eq('user_id', user.id)
+            .order('id', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          if (!isCurrent()) return false
+          if (latest?.id) createdId = latest.id
+        }
+
+        if (createdId) setEditingNoteId(createdId)
       }
-      if (editingNoteId !== null && deletedNoteIdsRef.current.has(editingNoteId)) return false
-      if (editingNoteId === null) setEditingNoteId(data.id)
+
       setLastSavedDraft(draft)
       setIsEditorDirty(false)
       setSaveStatus('saved')
@@ -855,6 +866,8 @@ function HomeContent() {
     editorVersionRef.current += 1
     setNoteMembers([])
     setOnlineMembers([])
+    if (typeof setInviteEmail === 'function') setInviteEmail('')
+    if (typeof setSharingMessage === 'function') setSharingMessage('')
     const draft = {
       title: note.title || '',
       content: note.content || '',
@@ -876,7 +889,10 @@ function HomeContent() {
     editorVersionRef.current += 1
     setNoteMembers([])
     setOnlineMembers([])
-    const emptyDraft = { title: '', content: '', accentColor: '#ffffff', folderId: getNewNoteFolderId(folderFilter, folders) }
+    if (typeof setInviteEmail === 'function') setInviteEmail('')
+    if (typeof setSharingMessage === 'function') setSharingMessage('')
+    const canUseFolder = typeof isPremium === 'undefined' || isPremium
+    const emptyDraft = { title: '', content: '', accentColor: '#ffffff', folderId: canUseFolder ? getNewNoteFolderId(folderFilter, folders) : '' }
     setEditingNoteId(null)
     setTitle(emptyDraft.title)
     setContent(emptyDraft.content)
@@ -892,6 +908,8 @@ function HomeContent() {
     if (!isFormOpen || isFormClosing) return
     setNoteMembers([])
     setOnlineMembers([])
+    if (typeof setInviteEmail === 'function') setInviteEmail('')
+    if (typeof setSharingMessage === 'function') setSharingMessage('')
     setIsEditorDirty(false)
     setIsFormClosing(true)
     const scope = accountScopeRef.current
@@ -900,6 +918,7 @@ function HomeContent() {
       if (scope !== accountScopeRef.current || editorVersion !== editorVersionRef.current) return
       setIsFormOpen(false)
       setIsFormClosing(false)
+      setEditingNoteId(null)
     }, getMotionDuration(180))
   }, [isFormClosing, isFormOpen])
 
@@ -913,7 +932,8 @@ function HomeContent() {
 
   const handleNewNoteClick = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      router.push(getNewNoteHref(folderFilter, folders))
+      const canUseFolder = typeof isPremium === 'undefined' || isPremium
+      router.push(canUseFolder ? getNewNoteHref(folderFilter, folders) : '/notes/new')
     } else {
       if (isFormOpen) closeNoteForm()
       else openNewNote()
@@ -954,6 +974,7 @@ function HomeContent() {
         refresh()
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'note_members' }, refresh)
       .subscribe()
     window.addEventListener('focus', refresh)
     document.addEventListener('visibilitychange', handleVisibility)
@@ -1228,6 +1249,38 @@ function HomeContent() {
     if (!error) fetchNotes(user.id)
   }
 
+  const leaveSharedNote = async (note: Note) => {
+    const scope = accountScopeRef.current
+    if (!user || scope.userId !== user.id) return
+
+    setNotes((current) => current.filter((item) => item.id !== note.id))
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        await fetch(`/api/notices?note_id=${note.id}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        })
+      }
+      await supabase
+        .from('note_members')
+        .delete()
+        .eq('note_id', note.id)
+        .eq('user_id', user.id)
+
+      if (scope !== accountScopeRef.current) return
+      await fetchNotes(user.id)
+    } catch (err: unknown) {
+      console.error('Failed to leave shared note:', err)
+      if (scope === accountScopeRef.current) {
+        await fetchNotes(user.id)
+      }
+    }
+  }
+
   const confirmDestructiveAction = async () => {
     const scope = accountScopeRef.current
     if (!user || scope.userId !== user.id) return
@@ -1247,7 +1300,8 @@ function HomeContent() {
       return
     }
     if (!note) return
-    if (action === 'trash') await toggleTrash(note)
+    if (action === 'leave') await leaveSharedNote(note)
+    else if (action === 'trash') await toggleTrash(note)
     else await deletePermanently(note)
   }
 
@@ -1274,14 +1328,32 @@ function HomeContent() {
   }
 
   const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr)
-    return d.toLocaleDateString(locale, {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    try {
+      const d = new Date(dateStr)
+      return d.toLocaleDateString(locale, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+    } catch {
+      return dateStr
+    }
+  }
+
+  const formatDateOnly = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr)
+      return d.toLocaleDateString(locale, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    } catch {
+      return dateStr
+    }
   }
 
   // Filter Notes berdasarkan Tab
@@ -1307,10 +1379,13 @@ function HomeContent() {
       yesterday.setDate(yesterday.getDate() - 1)
       const isYesterday = d.toDateString() === yesterday.toDateString()
 
-      const timeStr = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
-      if (isToday) return `${t('Hari ini')}, ${timeStr}`
-      if (isYesterday) return `${t('Kemarin')}, ${timeStr}`
-      return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' })
+      if (isToday) return t('Hari ini')
+      if (isYesterday) return t('Kemarin')
+      return d.toLocaleDateString(locale, {
+        day: 'numeric',
+        month: 'short',
+        year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+      })
     } catch {
       return dateStr
     }
@@ -1473,105 +1548,37 @@ function HomeContent() {
             </p>
           </section>
 
-          <section data-auth-card className="w-full max-w-[420px] rounded-[18px] border border-[#e0e0e0] bg-white p-5 sm:p-8">
-            <h1 className="text-[28px] font-semibold leading-[1.14] tracking-[-0.3px]">
-              {authMode === 'login' ? t('Selamat datang kembali') : t('Buat akun Notes')}
+          <section data-auth-card className="w-full max-w-[380px] sm:max-w-[420px] rounded-[24px] border border-[#e0e0e0] dark:border-white/10 bg-white dark:bg-[#252527] p-7 sm:p-9 shadow-xl backdrop-blur-xl">
+            <h1 className="text-[26px] sm:text-[28px] font-semibold leading-[1.15] tracking-[-0.3px] text-[#1d1d1f] dark:text-[#f5f5f7] text-center sm:text-left">
+              {t('Selamat datang kembali')}
             </h1>
-            <p className="mt-2 text-[17px] leading-[1.47] text-[#7a7a7a]">
-              {authMode === 'login' ? t('Masuk untuk membuka catatanmu.') : t('Daftar untuk mulai menyimpan catatan.')}
+            <p className="mt-2 text-[15px] sm:text-[16px] leading-[1.47] text-[#7a7a7a] dark:text-[#86868b] text-center sm:text-left">
+              {t('Masuk untuk membuka catatanmu.')}
             </p>
 
-            <div className="mt-6 grid grid-cols-2 rounded-full bg-[#f5f5f7] p-1 text-[14px]">
+            {/* Google Sign In Button */}
+            <div className="mt-8">
               <button
                 type="button"
-                onClick={() => { setAuthMode('login'); setAuthMessage('') }}
-                className={`min-h-10 rounded-full transition-all active:scale-95 ${authMode === 'login' ? 'bg-white text-[#1d1d1f]' : 'text-[#7a7a7a]'}`}
-              >{t('Masuk')}</button>
-              <button
-                type="button"
-                onClick={() => { setAuthMode('register'); setAuthMessage('') }}
-                className={`min-h-10 rounded-full transition-all active:scale-95 ${authMode === 'register' ? 'bg-white text-[#1d1d1f]' : 'text-[#7a7a7a]'}`}
-              >{t('Daftar')}</button>
+                onClick={handleGoogleLogin}
+                className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-full border border-[#d2d2d7] dark:border-white/15 bg-white dark:bg-white/10 px-5 text-[15px] font-medium text-[#1d1d1f] dark:text-white transition-all hover:bg-[#fafafc] dark:hover:bg-white/15 hover:border-[#86868b] shadow-sm active:scale-[0.98]"
+              >
+                <FcGoogle aria-hidden="true" className="h-5 w-5 shrink-0" />
+                <span>{t('Masuk dengan Google')}</span>
+              </button>
             </div>
 
-            <form onSubmit={handleEmailAuth} className="mt-6 space-y-4">
-              {authMode === 'register' && (
-                <label className="block text-[14px] text-[#333333]">
-                  {t('Nama')}
-                  <input
-                    required
-                    autoComplete="name"
-                    value={authName}
-                    onChange={(event) => setAuthName(event.target.value)}
-                    className="mt-2 h-11 w-full rounded-[8px] border border-[#e0e0e0] bg-white px-3 text-[17px] text-[#1d1d1f] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
-                  />
-                </label>
-              )}
-              <label className="block text-[14px] text-[#333333]">
-                {t('Email')}
-                <input
-                  required
-                  type="email"
-                  autoComplete="email"
-                  value={authEmail}
-                  onChange={(event) => setAuthEmail(event.target.value)}
-                  className="mt-2 h-11 w-full rounded-[8px] border border-[#e0e0e0] bg-white px-3 text-[17px] text-[#1d1d1f] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]"
-                />
-              </label>
-              <label className="block text-[14px] text-[#333333]">
-                {t('Kata sandi')}
-                <span className="mt-2 flex h-11 items-center rounded-[8px] border border-[#e0e0e0] bg-white focus-within:ring-2 focus-within:ring-[#0071e3]">
-                  <input
-                    required
-                    minLength={8}
-                    type={showAuthPassword ? 'text' : 'password'}
-                    autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
-                    value={authPassword}
-                    onChange={(event) => setAuthPassword(event.target.value)}
-                    className="h-full min-w-0 flex-1 bg-transparent px-3 text-[17px] text-[#1d1d1f] outline-none"
-                  />
-                  <button
-                    type="button"
-                    aria-label={showAuthPassword ? t('Sembunyikan password') : t('Tampilkan password')}
-                    aria-pressed={showAuthPassword}
-                    onClick={() => setShowAuthPassword((visible) => !visible)}
-                    className="h-11 rounded-full px-3 text-[12px] text-[#0066cc] active:scale-95"
-                  >{showAuthPassword ? t('Sembunyikan') : t('Tampilkan')}</button>
-                </span>
-              </label>
-              {authMessage && <p role="status" className="text-[14px] leading-[1.4] text-[#1d1d1f]">{authMessage}</p>}
-              {verificationEmail && authMode === 'register' && (
-                <div className="space-y-2 rounded-[8px] bg-[#f5f5f7] p-3">
-                  <button
-                    type="button"
-                    disabled={isResendingVerification}
-                    onClick={resendSignupVerification}
-                    className="min-h-11 rounded-full border border-[#0066cc] px-4 text-[14px] text-[#0066cc] transition-colors hover:bg-[#0066cc]/5 active:scale-95 disabled:opacity-60"
-                  >
-                    {isResendingVerification ? t('Mengirim...') : t('Kirim Ulang Email Verifikasi')}
-                  </button>
-                  <p className="text-[12px] leading-[1.45] text-[#7a7a7a]">
-                    {t('Periksa Inbox dan folder Spam. Jika email tidak terkirim, proyek Supabase mungkin perlu SMTP khusus atau menunggu batas kirim pulih.')}
-                  </p>
-                </div>
-              )}
-              <button
-                type="submit"
-                disabled={isAuthSubmitting}
-                className="min-h-11 w-full rounded-full bg-[#0066cc] px-5 text-[17px] text-white transition-all hover:bg-[#0071e3] active:scale-[0.98] disabled:opacity-60"
-              >{isAuthSubmitting ? t('Memproses...') : authMode === 'login' ? t('Masuk') : t('Buat Akun')}</button>
-            </form>
+            {authMessage && (
+              <p role="status" className="mt-4 text-center text-[13px] leading-[1.4] text-[#ff3b30] dark:text-[#ff453a]">
+                {authMessage}
+              </p>
+            )}
 
-            <div className="my-5 flex items-center gap-3 text-[12px] text-[#7a7a7a]">
-              <span className="h-px flex-1 bg-[#e0e0e0]" /><span>{t('atau')}</span><span className="h-px flex-1 bg-[#e0e0e0]" />
+            <div className="mt-8 border-t border-black/5 dark:border-white/10 pt-4 text-center">
+              <p className="text-[12px] text-[#86868b] dark:text-[#6e6e73]">
+                {t('Aplikasi catatan modern dengan sinkronisasi instan.')}
+              </p>
             </div>
-            <button
-              onClick={handleGoogleLogin}
-              className="flex min-h-11 w-full items-center justify-center gap-3 rounded-full border border-[#e0e0e0] bg-white px-5 text-[14px] text-[#1d1d1f] transition-colors hover:bg-[#fafafc] active:scale-[0.98]"
-            >
-              <FcGoogle aria-hidden="true" className="h-5 w-5" />
-              {t('Masuk dengan Google')}
-            </button>
           </section>
         </div>
       </main>
@@ -2077,65 +2084,47 @@ function HomeContent() {
         {/* Header from Figma Wireframe: Title, Subtitle, PageList, Big Avatar (Mobile Only) */}
         <div className="mb-1 sm:mb-6">
           <div className="mb-5 flex items-center justify-between sm:hidden">
-            <div>
+            <button
+              type="button"
+              onClick={handleOpenPageList}
+              aria-label={t('Buka Daftar Halaman & Menu')}
+              title={t('Daftar Halaman & Menu')}
+              className="flex min-h-[44px] items-center text-left transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3]"
+            >
               <h1 className={`text-[32px] sm:text-[38px] font-bold tracking-tight leading-none ${
                 isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
               }`}>
                 {activeTab === 'notes' ? t('Catatan') : t('Sampah')}
               </h1>
-              <p className={`mt-1.5 text-[13px] sm:text-[14px] ${
-                isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'
-              }`}>
-                {activeTab === 'notes'
-                  ? t('{count} catatan tersimpan', { count: filteredActiveNotes.length })
-                  : t('{count} catatan milikmu di tong sampah', { count: filteredTrashedNotes.length })}
-              </p>
-            </div>
+            </button>
 
-            {/* Mobile Header Actions: PageList + Big Avatar */}
-            <div className="flex items-center gap-2.5 sm:hidden">
-              {/* PageList Drawer Button on Mobile */}
+            {/* Big Avatar Button on the right (Mobile only) */}
+            <div className="relative shrink-0">
               <button
                 type="button"
-                aria-label={t('Buka Daftar Halaman & Menu')}
-                title={t('Daftar Halaman & Menu')}
-                onClick={handleOpenPageList}
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border shadow-sm transition-all active:scale-95 ${
-                  isDarkMode
-                    ? 'border-white/15 bg-[#252527] text-[#f5f5f7] hover:bg-white/10'
-                    : 'border-black/10 bg-white text-[#1d1d1f] hover:bg-black/5'
-                }`}
+                aria-label={t('Menu profil')}
+                aria-expanded={isProfileMenuOpen}
+                aria-haspopup="menu"
+                onClick={() => setIsProfileMenuOpen((open) => !open)}
+                className="flex items-center rounded-full p-0.5 transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3]"
               >
-                <HiOutlineMenuAlt2 aria-hidden="true" className="h-5 w-5" />
+                {(profile?.avatar_url || user.user_metadata?.avatar_url) ? (
+                  <Image
+                    src={profile?.avatar_url || user.user_metadata.avatar_url}
+                    alt=""
+                    width={44}
+                    height={44}
+                    unoptimized
+                    className={`h-11 w-11 rounded-full object-cover border-2 shadow-sm ${
+                      isDarkMode ? 'border-white/20' : 'border-black/10'
+                    }`}
+                  />
+                ) : (
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0066cc] text-white text-[16px] font-semibold shadow-sm">
+                    {(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}
+                  </span>
+                )}
               </button>
-
-              {/* Big Avatar Button on the right (Mobile only) */}
-              <div className="relative">
-                <button
-                  type="button"
-                  aria-label={t('Menu profil')}
-                  aria-expanded={isProfileMenuOpen}
-                  aria-haspopup="menu"
-                  onClick={() => setIsProfileMenuOpen((open) => !open)}
-                  className="flex items-center rounded-full p-0.5 transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3]"
-                >
-                  {(profile?.avatar_url || user.user_metadata?.avatar_url) ? (
-                    <Image
-                      src={profile?.avatar_url || user.user_metadata.avatar_url}
-                      alt=""
-                      width={48}
-                      height={48}
-                      unoptimized
-                      className={`h-12 w-12 rounded-full object-cover border-2 shadow-sm ${
-                        isDarkMode ? 'border-white/20' : 'border-black/10'
-                      }`}
-                    />
-                  ) : (
-                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0066cc] text-white text-[18px] font-semibold shadow-sm">
-                      {(profile?.full_name || user.email || 'U').slice(0, 1).toUpperCase()}
-                    </span>
-                  )}
-                </button>
 
               {/* Profile Menu Popover for Mobile */}
               {profileMenuPresence.isPresent && (
@@ -2212,13 +2201,12 @@ function HomeContent() {
                 </>
               )}
             </div>
-            </div>
           </div>
 
           {/* Unified Controls Toolbar: [ Folder Dropdown ] [ Search Bar ] [ Sort Toggle ] */}
           <div className="mb-6 flex items-center gap-2 sm:gap-3">
-            {/* 1. Left: Folder Dropdown (Notes tab only) */}
-            {activeTab === 'notes' && (
+            {/* 1. Left: Folder Dropdown (Notes tab only, Premium only) */}
+            {activeTab === 'notes' && isPremium && (
               <div className="relative shrink-0">
                 <button
                   type="button"
@@ -2494,6 +2482,21 @@ function HomeContent() {
                       }}
                       className="w-full min-w-0 bg-transparent text-[21px] font-semibold leading-[1.2] text-[#1d1d1f] outline-none placeholder:text-[#7a7a7a] focus-visible:ring-2 focus-visible:ring-[#0071e3]"
                     />
+                    {editingNoteId !== null && (
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[#7a7a7a]">
+                        {(() => {
+                          const currentNote = notes.find((n) => n.id === editingNoteId)
+                          if (!currentNote) return null
+                          return (
+                            <>
+                              <span>{t('Dibuat: {date}', { date: formatDate(currentNote.created_at) })}</span>
+                              <span>·</span>
+                              <span>{t('Edit: {date}', { date: formatDate(currentNote.updated_at || currentNote.created_at) })}</span>
+                            </>
+                          )
+                        })()}
+                      </div>
+                    )}
                     <p aria-live="polite" className="mt-2 min-h-5 text-[12px] text-[#7a7a7a]">
                       {saveStatus === 'saving' && t('Menyimpan...')}
                       {saveStatus === 'saved' && <><HiOutlineCheck aria-hidden="true" className="mr-1 inline-block align-middle" />{t('Autosave complete')}</>}
@@ -2543,9 +2546,28 @@ function HomeContent() {
                       </div>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {noteMembers.filter((person) => person.user_id !== user.id).map((person) => (
-                        <span key={person.user_id} className="rounded-full bg-[#f5f5f7] px-3 py-1.5 text-[12px] text-[#333333]">{person.full_name || t('Kolaborator')}</span>
-                      ))}
+                      {noteMembers.filter((person) => person.user_id !== user.id).map((person) => {
+                        const isOwner = notes.find((item) => item.id === editingNoteId)?.user_id === user.id
+                        return (
+                          <span
+                            key={person.user_id}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-[#f5f5f7] py-1.5 pl-3 pr-2 text-[12px] text-[#333333] border border-[#e5e5ea]"
+                          >
+                            <span>{person.full_name || t('Kolaborator')}</span>
+                            {isOwner && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCollaborator(person.user_id)}
+                                title={t('Hapus kolaborator')}
+                                aria-label={t('Hapus kolaborator {name}', { name: person.full_name || t('Kolaborator') })}
+                                className="flex h-4 w-4 items-center justify-center rounded-full text-[#86868b] hover:bg-black/10 hover:text-[#ff3b30] active:scale-90 transition-all"
+                              >
+                                <HiOutlineX className="h-3 w-3" aria-hidden="true" />
+                              </button>
+                            )}
+                          </span>
+                        )
+                      })}
                     </div>
                     {notes.find((item) => item.id === editingNoteId)?.user_id === user.id && (
                       <div className="mt-4 flex flex-wrap gap-2">
@@ -2653,7 +2675,7 @@ function HomeContent() {
                 {/* 1. Mobile List View (Spacious Apple Cards) */}
                 <div className="block sm:hidden space-y-4">
                   {filteredActiveNotes.map((note) => {
-                    const folder = folders.find((f) => f.id === note.folder_id)
+                    const folder = isPremium ? folders.find((f) => f.id === note.folder_id) : null
                     return (
                       <article
                         key={note.id}
@@ -2685,25 +2707,35 @@ function HomeContent() {
                             }`}>
                               {note.title || t('Tanpa Judul')}
                             </h3>
-                            {note.is_pinned && (
-                              note.user_id === user.id ? (
-                                <button
-                                  type="button"
-                                  aria-label={t('Lepas pin catatan')}
-                                  title={t('Lepas pin catatan')}
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    togglePin(note)
-                                  }}
-                                  className="shrink-0 -mr-1 -mt-1 flex h-8 w-8 items-center justify-center rounded-full text-[#0066cc] active:scale-90 transition-transform"
-                                >
+                            {note.user_id === user.id ? (
+                              <button
+                                type="button"
+                                aria-label={note.is_pinned ? t('Lepas pin catatan') : t('Pin catatan')}
+                                title={note.is_pinned ? t('Lepas pin catatan') : t('Pin catatan')}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  togglePin(note)
+                                }}
+                                className={`shrink-0 -mr-1 -mt-1 flex h-8 w-8 items-center justify-center rounded-full transition-transform active:scale-90 ${
+                                  note.is_pinned
+                                    ? 'text-[#0066cc]'
+                                    : isDarkMode
+                                      ? 'text-[#86868b] hover:text-[#f5f5f7]'
+                                      : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
+                                } ${pinAnimation?.id === note.id ? (pinAnimation.pinning ? 'animate-pin-on' : 'animate-pin-off') : ''}`}
+                              >
+                                {note.is_pinned ? (
                                   <BsPinFill aria-hidden="true" className="h-4 w-4" />
-                                </button>
-                              ) : (
+                                ) : (
+                                  <BsPin aria-hidden="true" className="h-4 w-4" />
+                                )}
+                              </button>
+                            ) : (
+                              note.is_pinned ? (
                                 <span className="shrink-0 text-[#0066cc] text-[14px] pt-0.5" title={t('Disematkan')}>
                                   <BsPinFill aria-hidden="true" />
                                 </span>
-                              )
+                              ) : null
                             )}
                           </div>
 
@@ -2726,68 +2758,59 @@ function HomeContent() {
                             )}
                             <span>{formatNoteDate(note.updated_at || note.created_at)}</span>
 
-                            {notePeopleById[note.id]?.length ? (
-                              <div className="ml-2 flex -space-x-1">
-                                {(notePeopleById[note.id] ?? []).slice(0, 3).map((person) => (
-                                  <span
-                                    key={person.user_id}
-                                    title={person.full_name || t('Pengguna note')}
-                                    className={`flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border text-[9px] ${
+                            {(() => {
+                              const isOwned = note.user_id === user.id
+                              const collaborators = (notePeopleById[note.id] ?? []).filter((person) => person.user_id !== user.id)
+                              const shouldShow = isOwned ? collaborators.length > 0 : true
+                              if (!shouldShow) return null
+                              const displayed = isOwned ? collaborators : (notePeopleById[note.id] ?? []).filter((person) => person.user_id !== user.id)
+                              if (displayed.length === 0 && isOwned) return null
+                              return (
+                                <div className="ml-2 flex -space-x-1" aria-label={isOwned ? t('Kolaborator') : t('Dibagikan')}>
+                                  {displayed.slice(0, 3).map((person) => (
+                                    <span
+                                      key={person.user_id}
+                                      title={person.full_name || (isOwned ? t('Kolaborator') : t('Pemilik catatan'))}
+                                      className={`flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border text-[9px] ${
+                                        isDarkMode ? 'border-[#1d1d1f] bg-[#252527] text-[#f5f5f7]' : 'border-white bg-[#f5f5f7] text-[#1d1d1f]'
+                                      }`}
+                                    >
+                                      {person.avatar_url ? (
+                                        <Image src={person.avatar_url} alt="" width={20} height={20} unoptimized className="h-full w-full object-cover" />
+                                      ) : (
+                                        (person.full_name || '?').slice(0, 1).toUpperCase()
+                                      )}
+                                    </span>
+                                  ))}
+                                  {displayed.length > 3 && (
+                                    <span className={`flex h-5 min-w-5 items-center justify-center rounded-full border px-1 text-[8px] ${
                                       isDarkMode ? 'border-[#1d1d1f] bg-[#252527] text-[#f5f5f7]' : 'border-white bg-[#f5f5f7] text-[#1d1d1f]'
-                                    }`}
-                                  >
-                                    {person.avatar_url ? (
-                                      <Image src={person.avatar_url} alt="" width={20} height={20} unoptimized className="h-full w-full object-cover" />
-                                    ) : (
-                                      (person.full_name || '?').slice(0, 1).toUpperCase()
-                                    )}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : null}
+                                    }`}>
+                                      +{displayed.length - 3}
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            })()}
                           </div>
 
                           <div className="flex items-center gap-1 shrink-0">
-                            {note.user_id === user.id && (
-                              <button
-                                type="button"
-                                aria-label={note.is_pinned ? t('Lepas pin catatan') : t('Pin catatan')}
-                                title={note.is_pinned ? t('Lepas pin catatan') : t('Pin catatan')}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  togglePin(note)
-                                }}
-                                className={`flex h-8 w-8 items-center justify-center rounded-full transition-transform active:scale-95 ${
-                                  note.is_pinned
-                                    ? 'text-[#0066cc]'
-                                    : isDarkMode
-                                      ? 'text-[#86868b] hover:text-[#f5f5f7]'
-                                      : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
-                                }`}
-                              >
-                                {note.is_pinned ? <BsPinFill className="h-4 w-4" aria-hidden="true" /> : <BsPin className="h-4 w-4" aria-hidden="true" />}
-                              </button>
-                            )}
-                            {note.user_id === user.id ? (
-                              <button
-                                type="button"
-                                aria-label={t('Buang')}
-                                title={t('Buang')}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  setConfirmation({ action: 'trash', note })
-                                }}
-                                className={`flex h-8 w-8 items-center justify-center rounded-full active:scale-95 transition-all ${
-                                  isDarkMode
-                                    ? 'text-[#86868b] hover:text-[#ff453a] hover:bg-white/10'
-                                    : 'text-[#7a7a7a] hover:text-[#ff3b30] hover:bg-black/5'
-                                }`}
-                              >
-                                <HiOutlineTrash aria-hidden="true" className="h-4 w-4" />
-                              </button>
-                            ) : (
-                              <span className={`text-[11px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>{t('Dibagikan')}</span>
-                            )}
+                            <button
+                              type="button"
+                              aria-label={note.user_id === user.id ? t('Buang') : t('Hapus dari beranda')}
+                              title={note.user_id === user.id ? t('Buang') : t('Hapus dari beranda')}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setConfirmation({ action: note.user_id === user.id ? 'trash' : 'leave', note })
+                              }}
+                              className={`flex h-8 w-8 items-center justify-center rounded-full active:scale-95 transition-all ${
+                                isDarkMode
+                                  ? 'text-[#86868b] hover:text-[#ff453a] hover:bg-white/10'
+                                  : 'text-[#7a7a7a] hover:text-[#ff3b30] hover:bg-black/5'
+                              }`}
+                            >
+                              <HiOutlineTrash aria-hidden="true" className="h-4 w-4" />
+                            </button>
                           </div>
                         </div>
                       </article>
@@ -2842,49 +2865,76 @@ function HomeContent() {
                         </p>
                       </div>
 
-                      <div className="flex flex-col gap-2 border-t border-black/5 pt-3 text-[12px] text-[#7a7a7a] sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-col gap-2 border-t border-black/5 dark:border-white/10 pt-3 text-[12px] text-[#7a7a7a] dark:text-[#86868b] sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <div>{t('Dibuat: {date}', { date: formatDate(note.created_at) })}</div>
-                          <div>{t('Edit: {date}', { date: formatDate(note.updated_at) })}</div>
+                          <span>{t('Edit: {date}', { date: formatDateOnly(note.updated_at || note.created_at) })}</span>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-1 self-end sm:self-auto sm:gap-2">
-                          {note.user_id === user.id ? (
-                            <button
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                setConfirmation({ action: 'trash', note })
-                              }}
-                              className="min-h-11 px-2 text-[#0066cc] hover:underline"
-                            >
-                              {t('Buang')}
-                            </button>
-                          ) : (
-                            <div className="flex min-h-11 items-center gap-2 px-2">
-                              <span className="text-[12px] text-[#7a7a7a]">{t('Dibagikan')}</span>
-                              <div
-                                className="flex items-center pl-1"
-                                aria-label={t('Dibagikan oleh {name}', { name: notePeopleById[note.id]?.map((person) => person.full_name || t('pengguna')).join(', ') || t('pemilik catatan') })}
-                              >
-                                {(notePeopleById[note.id] ?? []).slice(0, 4).map((person) => (
-                                  <span
-                                    key={person.user_id}
-                                    title={person.full_name || t('Pengguna note')}
-                                    className="-ml-1 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#f5f5f7] text-[10px] text-[#1d1d1f] first:ml-0"
-                                  >
-                                    {person.avatar_url
-                                      ? <Image src={person.avatar_url} alt={person.full_name || t('Foto profil')} width={28} height={28} unoptimized className="h-full w-full object-cover" />
-                                      : (person.full_name || '?').slice(0, 1).toUpperCase()}
-                                  </span>
-                                ))}
-                                {(notePeopleById[note.id]?.length ?? 0) > 4 && (
-                                  <span className="-ml-1 flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-white bg-[#f5f5f7] px-1 text-[9px] text-[#1d1d1f]">
-                                    +{(notePeopleById[note.id]?.length ?? 0) - 4}
-                                  </span>
-                                )}
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          {(() => {
+                            const isOwned = note.user_id === user.id
+                            const collaborators = (notePeopleById[note.id] ?? []).filter((person) => person.user_id !== user.id)
+                            const shouldShow = isOwned ? collaborators.length > 0 : true
+                            if (!shouldShow) return null
+                            const displayed = isOwned ? collaborators : (notePeopleById[note.id] ?? []).filter((person) => person.user_id !== user.id)
+                            if (displayed.length === 0 && isOwned) return null
+                            return (
+                              <div className="flex items-center gap-1.5 mr-1">
+                                <span className={`text-[12px] ${isDarkMode ? 'text-[#86868b]' : 'text-[#7a7a7a]'}`}>
+                                  {isOwned ? t('Kolaborator') : t('Dibagikan')}
+                                </span>
+                                <div
+                                  className="flex items-center pl-1"
+                                  aria-label={
+                                    !isOwned
+                                      ? t('Dibagikan oleh {name}', { name: displayed.map((person) => person.full_name || t('pengguna')).join(', ') || t('pemilik catatan') })
+                                      : t('Kolaborator catatan')
+                                  }
+                                >
+                                  {displayed.slice(0, 4).map((person) => (
+                                    <span
+                                      key={person.user_id}
+                                      title={person.full_name || (isOwned ? t('Kolaborator') : t('Pengguna note'))}
+                                      className={`-ml-1 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 text-[10px] first:ml-0 shadow-sm ${
+                                        isDarkMode
+                                          ? 'border-[#252527] bg-[#3a3a3c] text-[#f5f5f7]'
+                                          : 'border-white bg-[#f5f5f7] text-[#1d1d1f]'
+                                      }`}
+                                    >
+                                      {person.avatar_url
+                                        ? <Image src={person.avatar_url} alt={person.full_name || t('Foto profil')} width={28} height={28} unoptimized className="h-full w-full object-cover" />
+                                        : (person.full_name || '?').slice(0, 1).toUpperCase()}
+                                    </span>
+                                  ))}
+                                  {displayed.length > 4 && (
+                                    <span className={`-ml-1 flex h-7 min-w-7 items-center justify-center rounded-full border-2 px-1 text-[9px] shadow-sm ${
+                                      isDarkMode
+                                        ? 'border-[#252527] bg-[#3a3a3c] text-[#f5f5f7]'
+                                        : 'border-white bg-[#f5f5f7] text-[#1d1d1f]'
+                                    }`}>
+                                      +{displayed.length - 4}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )
+                          })()}
+                          <button
+                            type="button"
+                            aria-label={note.user_id === user.id ? t('Buang') : t('Hapus dari beranda')}
+                            title={note.user_id === user.id ? t('Buang') : t('Hapus dari beranda')}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setConfirmation({ action: note.user_id === user.id ? 'trash' : 'leave', note })
+                            }}
+                            className={`flex h-8 w-8 items-center justify-center rounded-full transition-all active:scale-95 ${
+                              isDarkMode
+                                ? 'text-[#86868b] hover:text-[#ff453a] hover:bg-white/10'
+                                : 'text-[#7a7a7a] hover:text-[#ff3b30] hover:bg-black/5'
+                            }`}
+                          >
+                            <HiOutlineTrash aria-hidden="true" className="h-4 w-4" />
+                          </button>
                         </div>
                       </div>
                     </article>
@@ -3070,27 +3120,37 @@ function HomeContent() {
               }`}
             >
               <div className={`mb-5 flex h-11 w-11 items-center justify-center rounded-full text-[21px] font-semibold ${
-                isDarkMode ? 'bg-white/10 text-[#2997ff]' : 'bg-[#f5f5f7] text-[#0066cc]'
+                confirmationPresence.value.action === 'leave' || confirmationPresence.value.action === 'delete' || confirmationPresence.value.action === 'deleteAll'
+                  ? isDarkMode ? 'bg-[#ff453a]/15 text-[#ff453a]' : 'bg-[#ff3b30]/10 text-[#ff3b30]'
+                  : isDarkMode ? 'bg-white/10 text-[#2997ff]' : 'bg-[#f5f5f7] text-[#0066cc]'
               }`} aria-hidden="true">
-                {confirmationPresence.value.action === 'trash' ? <HiOutlineTrash aria-hidden="true" /> : <HiOutlineX aria-hidden="true" />}
+                {confirmationPresence.value.action === 'trash' || confirmationPresence.value.action === 'leave' ? (
+                  <HiOutlineTrash aria-hidden="true" />
+                ) : (
+                  <HiOutlineX aria-hidden="true" />
+                )}
               </div>
               <h2 id="confirmation-title" className={`text-[21px] font-semibold leading-[1.2] tracking-[-0.2px] ${
                 isDarkMode ? 'text-[#f5f5f7]' : 'text-[#1d1d1f]'
               }`}>
                 {confirmationPresence.value.action === 'trash'
                   ? t('Pindahkan ke Tong Sampah?')
-                  : confirmationPresence.value.action === 'deleteAll'
-                    ? t('Hapus Semua Catatan Permanen?')
-                    : t('Hapus Catatan Permanen?')}
+                  : confirmationPresence.value.action === 'leave'
+                    ? t('Hapus dari Beranda?')
+                    : confirmationPresence.value.action === 'deleteAll'
+                      ? t('Hapus Semua Catatan Permanen?')
+                      : t('Hapus Catatan Permanen?')}
               </h2>
               <p id="confirmation-description" className={`mt-3 text-[17px] leading-[1.47] ${
                 isDarkMode ? 'text-[#86868b]' : 'text-[#1d1d1f]'
               }`}>
                 {confirmationPresence.value.action === 'trash'
                   ? t('“{name}” akan dipindahkan ke tong sampah. Kamu masih bisa memulihkannya nanti.', { name: confirmationPresence.value.note?.title || t('Tanpa Judul') })
-                  : confirmationPresence.value.action === 'deleteAll'
-                    ? t('{count} catatan milikmu di tong sampah akan dihapus permanen dan tidak dapat dipulihkan.', { count: confirmationPresence.value.count ?? ownedTrashedCount })
-                    : t('“{name}” akan dihapus selamanya dan tidak dapat dipulihkan.', { name: confirmationPresence.value.note?.title || t('Tanpa Judul') })}
+                  : confirmationPresence.value.action === 'leave'
+                    ? t('“{name}” adalah catatan bersama. Menghapus catatan ini akan mengeluarkanmu dari kolaborasi dan catatan tidak akan muncul lagi di berandamu.', { name: confirmationPresence.value.note?.title || t('Tanpa Judul') })
+                    : confirmationPresence.value.action === 'deleteAll'
+                      ? t('{count} catatan milikmu di tong sampah akan dihapus permanen dan tidak dapat dipulihkan.', { count: confirmationPresence.value.count ?? ownedTrashedCount })
+                      : t('“{name}” akan dihapus selamanya dan tidak dapat dipulihkan.', { name: confirmationPresence.value.note?.title || t('Tanpa Judul') })}
               </p>
               <div className="mt-6 flex flex-wrap justify-end gap-2 sm:mt-7 sm:gap-3">
                 <button
@@ -3108,14 +3168,18 @@ function HomeContent() {
                   onClick={confirmDestructiveAction}
                   disabled={confirmationPresence.isExiting || !confirmation}
                   className={`min-h-11 rounded-full px-[20px] text-[14px] text-white transition-all active:scale-95 ${
-                    isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'
+                    confirmationPresence.value.action === 'leave' || confirmationPresence.value.action === 'delete' || confirmationPresence.value.action === 'deleteAll'
+                      ? isDarkMode ? 'bg-[#ff453a] hover:bg-[#d70015]' : 'bg-[#ff3b30] hover:bg-[#d70015]'
+                      : isDarkMode ? 'bg-[#2997ff] hover:bg-[#0071e3]' : 'bg-[#0066cc] hover:bg-[#0071e3]'
                   }`}
                 >
                   {confirmationPresence.value.action === 'trash'
                     ? t('Pindahkan')
-                    : confirmationPresence.value.action === 'deleteAll'
-                      ? t('Hapus Semua')
-                      : t('Hapus Permanen')}
+                    : confirmationPresence.value.action === 'leave'
+                      ? t('Hapus Catatan')
+                      : confirmationPresence.value.action === 'deleteAll'
+                        ? t('Hapus Semua')
+                        : t('Hapus Permanen')}
                 </button>
               </div>
             </section>

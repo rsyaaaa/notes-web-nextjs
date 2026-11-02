@@ -103,6 +103,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   const [isTrashed, setIsTrashed] = useState(false)
   const [updatedAt, setUpdatedAt] = useState<string>('')
   const [createdAt, setCreatedAt] = useState<string>('')
+  const [timeDisplayMode, setTimeDisplayMode] = useState<'edited' | 'created'>('edited')
   const [noteOwnerId, setNoteOwnerId] = useState<string>('')
 
   // Related data
@@ -585,7 +586,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         title: finalTitle,
         content: draftToSave.content,
         accent_color: draftToSave.accentColor || '#ffffff',
-        folder_id: draftToSave.folderId ? Number(draftToSave.folderId) : null,
+        folder_id: (typeof isPremium === 'undefined' || isPremium) && draftToSave.folderId ? Number(draftToSave.folderId) : null,
         updated_at: new Date().toISOString(),
       }
 
@@ -707,6 +708,18 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
   const handleTogglePin = async () => {
     if (!accountScopeRef.current.active || deletedRef.current) return
     const nextPinned = !isPinned
+    if (nextPinned && isOwner && !isPremium && user) {
+      const { count } = await supabase
+        .from('notes')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_pinned', true)
+        .eq('is_trashed', false)
+      if (count !== null && count >= 3) {
+        alert(t('Paket Free memiliki batas 3 catatan pin. Premium membuka pin tanpa batas.'))
+        return
+      }
+    }
     setIsPinned(nextPinned)
     const success = await saveNote({ is_pinned: nextPinned })
     if (!success && accountScopeRef.current.active) {
@@ -742,6 +755,33 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       alert(t('Gagal menghapus: {error}', { error: error.message }))
       return
     }
+    router.push('/')
+  }
+
+  // Leave shared note collaboration
+  const handleLeaveCollaboration = async () => {
+    const scope = accountScopeRef.current
+    const editorVersion = editorVersionRef.current
+    if (!scope.active || !noteId || !user) return
+    const confirmed = window.confirm(t('Hapus catatan ini dari daftar Anda dan keluar dari kolaborasi?'))
+    if (!confirmed) return
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        await fetch(`/api/notices?note_id=${noteId}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        })
+      }
+      await supabase.from('note_members').delete().eq('note_id', noteId).eq('user_id', user.id)
+    } catch (err) {
+      console.error('Failed to leave note:', err)
+    }
+
+    if (!scope.active || editorVersion !== editorVersionRef.current) return
     router.push('/')
   }
 
@@ -885,6 +925,7 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
+        hour12: false,
       })
     } catch {
       return dateStr
@@ -1013,10 +1054,13 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           <span className="sm:hidden">{t("Catatan")}</span>
         </button>
 
-        {/* Center: Save Status indicator badge */}
+        {/* Center: Save Status indicator badge & Last edited/created toggle */}
         <div
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] tracking-[-0.12px] transition-all ${isDarkMode ? 'text-[#b3b3b8] bg-white/[0.05]' : 'text-[#7a7a7a] bg-black/[0.04]'
-            }`}
+          role="status"
+          aria-live="polite"
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] tracking-[-0.12px] transition-all ${
+            isDarkMode ? 'text-[#b3b3b8] bg-white/[0.05]' : 'text-[#7a7a7a] bg-black/[0.04]'
+          }`}
         >
           {saveStatus === 'saving' && (
             <span className={`flex items-center gap-1.5 ${isDarkMode ? 'text-[#2997ff]' : 'text-[#0066cc]'}`}>
@@ -1037,7 +1081,23 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
             </span>
           )}
           {saveStatus === 'idle' && (
-            <span>{updatedAt ? t('Diedit {date}', { date: formatDate(updatedAt) }) : t('Catatan Baru')}</span>
+            <button
+              type="button"
+              onClick={() => setTimeDisplayMode((m) => (m === 'edited' ? 'created' : 'edited'))}
+              title={timeDisplayMode === 'edited' ? t('Ketuk untuk melihat waktu dibuat') : t('Ketuk untuk melihat waktu diedit')}
+              aria-label={timeDisplayMode === 'edited' ? t('Waktu diedit. Ketuk untuk melihat waktu dibuat.') : t('Waktu dibuat. Ketuk untuk melihat waktu diedit.')}
+              className="cursor-pointer active:scale-95 transition-transform flex items-center select-none"
+            >
+              <span className="truncate max-w-[155px] sm:max-w-none">
+                {timeDisplayMode === 'edited'
+                  ? (updatedAt
+                      ? t('Diedit {date}', { date: formatDate(updatedAt) })
+                      : (createdAt ? t('Diedit {date}', { date: formatDate(createdAt) }) : t('Catatan Baru')))
+                  : (createdAt
+                      ? t('Dibuat: {date}', { date: formatDate(createdAt) })
+                      : t('Baru saja'))}
+              </span>
+            </button>
           )}
         </div>
 
@@ -1142,13 +1202,13 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
               </button>
             )}
 
-            {/* Move to Trash / Delete */}
-            {!isNew && isOwner && (
+            {/* Move to Trash / Delete / Leave Collaboration */}
+            {!isNew && (
               <button
                 type="button"
-                aria-label={isTrashed ? t('Hapus permanen') : t('Buang catatan')}
-                title={isTrashed ? t('Hapus permanen') : t('Buang catatan')}
-                onClick={isTrashed ? handleDeletePermanently : handleToggleTrash}
+                aria-label={isOwner ? (isTrashed ? t('Hapus permanen') : t('Buang catatan')) : t('Hapus dari beranda')}
+                title={isOwner ? (isTrashed ? t('Hapus permanen') : t('Buang catatan')) : t('Hapus dari beranda')}
+                onClick={isOwner ? (isTrashed ? handleDeletePermanently : handleToggleTrash) : handleLeaveCollaboration}
                 className={`flex h-[38px] w-[38px] items-center justify-center rounded-full border text-[14px] transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-[#0071e3] ${isDarkMode
                     ? 'border-[#3a3a3e] bg-[#252527] text-[#b3b3b8] hover:text-[#ff453a]'
                     : 'border-[#e0e0e0] bg-white text-[#7a7a7a] hover:text-[#ff3b30]'
@@ -1182,38 +1242,35 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
       <main data-motion-content className="mx-auto flex w-full max-w-[980px] flex-1 flex-col px-4 py-6 pb-36 sm:px-8 sm:py-10 sm:pb-36">
         {/* Note Metadata Strip */}
         <div
-          className={`mb-4 flex flex-wrap items-center justify-between gap-2 pb-3 text-[12px] tracking-[-0.12px] ${isDarkMode
-              ? 'border-b border-white/10 text-[#b3b3b8]'
-              : 'border-b border-black/5 text-[#7a7a7a]'
+          className={`mb-4 flex items-center justify-between gap-2 pb-3 text-[12px] tracking-[-0.12px] border-b ${isDarkMode
+              ? 'border-white/10 text-[#b3b3b8]'
+              : 'border-black/5 text-[#7a7a7a]'
             }`}
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <span>{createdAt ? formatDate(createdAt) : t('Baru saja')}</span>
+          {/* Folder selection badge */}
+          {isPremium ? (
+            <div className="relative inline-block">
+              <button
+                type="button"
+                onClick={() => setShowFolderPicker(!showFolderPicker)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition-all active:scale-95 shadow-sm ${isDarkMode
+                    ? 'border-[#3a3a3e] bg-[#252527] text-[#f5f5f7] hover:bg-[#2c2c2e]'
+                    : 'border-[#e0e0e0] bg-white text-[#1d1d1f] hover:bg-[#fafafc]'
+                  }`}
+              >
+                <HiOutlineFolder className="h-3.5 w-3.5 text-[#0066cc]" aria-hidden="true" />
+                <span className="max-w-[150px] truncate">{folders.find((f) => String(f.id) === folderId)?.name || t('Tanpa Folder')}</span>
+                <HiOutlineChevronDown className="h-3 w-3 opacity-60" aria-hidden="true" />
+              </button>
 
-            {/* Folder selection badge */}
-            {isPremium && (
-              <div className="relative inline-block">
-                <button
-                  type="button"
-                  onClick={() => setShowFolderPicker(!showFolderPicker)}
-                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[12px] transition-transform active:scale-95 ${isDarkMode
-                      ? 'border-[#3a3a3e] bg-[#252527]/80 text-[#f5f5f7]'
-                      : 'border-[#e0e0e0] bg-white/70 text-[#1d1d1f]'
+              {folderPickerPresence.isPresent && (
+                <div
+                  data-motion-kind="popover"
+                  data-motion-state={folderPickerPresence.isExiting ? 'closing' : 'open'}
+                  inert={folderPickerPresence.isExiting}
+                  className={`motion-popover absolute left-0 top-[calc(100%+6px)] z-50 min-w-44 rounded-[14px] border p-1.5 shadow-xl backdrop-blur-xl ${isDarkMode ? 'border-[#3a3a3e] bg-[#252527]/95' : 'border-[#e0e0e0] bg-white/95'
                     }`}
                 >
-                  <HiOutlineFolder aria-hidden="true" />
-                  <span>{folders.find((f) => String(f.id) === folderId)?.name || t('Tanpa Folder')}</span>
-                  <span className={`text-[10px] ${isDarkMode ? 'text-[#b3b3b8]' : 'text-[#7a7a7a]'}`}><HiOutlineChevronDown aria-hidden="true" /></span>
-                </button>
-
-                {folderPickerPresence.isPresent && (
-                  <div
-                    data-motion-kind="popover"
-                    data-motion-state={folderPickerPresence.isExiting ? 'closing' : 'open'}
-                    inert={folderPickerPresence.isExiting}
-                    className={`motion-popover absolute left-0 top-[30px] z-50 min-w-40 rounded-[14px] border p-1.5 shadow-none ${isDarkMode ? 'border-[#3a3a3e] bg-[#252527]' : 'border-[#e0e0e0] bg-white'
-                      }`}
-                  >
                     <button
                       type="button"
                       onClick={() => {
@@ -1257,8 +1314,9 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
                   </div>
                 )}
               </div>
+            ) : (
+              <div />
             )}
-          </div>
 
           <div className="flex items-center gap-3">
             <span>{t('{count} kata', { count: content.trim() ? content.trim().split(/\s+/).length : 0 })}</span>
@@ -1419,13 +1477,13 @@ function NoteDetailContent({ isNewOverride = false }: { isNewOverride?: boolean 
           </button>
         )}
 
-        {/* Delete / Trash Button */}
-        {!isNew && isOwner && (
+        {/* Delete / Trash / Leave Button */}
+        {!isNew && (
           <button
             type="button"
-            aria-label={isTrashed ? t('Hapus permanen') : t('Buang catatan')}
-            title={isTrashed ? t('Hapus permanen') : t('Buang catatan')}
-            onClick={isTrashed ? handleDeletePermanently : handleToggleTrash}
+            aria-label={isOwner ? (isTrashed ? t('Hapus permanen') : t('Buang catatan')) : t('Hapus dari beranda')}
+            title={isOwner ? (isTrashed ? t('Hapus permanen') : t('Buang catatan')) : t('Hapus dari beranda')}
+            onClick={isOwner ? (isTrashed ? handleDeletePermanently : handleToggleTrash) : handleLeaveCollaboration}
             className={`flex h-[36px] w-[36px] items-center justify-center rounded-full transition-transform active:scale-95 ${isDarkMode
                 ? 'text-[#b3b3b8] hover:text-[#ff453a] hover:bg-white/10'
                 : 'text-[#7a7a7a] hover:text-[#ff3b30] hover:bg-black/5'

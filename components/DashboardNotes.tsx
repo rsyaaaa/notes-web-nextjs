@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import Image from 'next/image'
-import { HiOutlineChevronDown, HiOutlineFolder, HiOutlineSearch, HiPlus, HiStar } from 'react-icons/hi'
+import { HiOutlineChevronDown, HiOutlineFolder, HiOutlineSearch, HiPlus, HiStar, HiOutlineTrash } from 'react-icons/hi'
 import { supabase } from '@/lib/supabaseClient'
 import { getNewNoteFolderId, getNewNoteHref } from '@/lib/new-note-folder'
 import type { DeletedNoteNotice, Note, NoteDraft, NoteFolder, NotePerson, UserProfile } from '@/lib/types'
@@ -787,19 +787,37 @@ function AccountDashboardNotes({ user, initialProfile, onLogout }: DashboardNote
                         </div>
 
                         {/* Trash button */}
-                        {note.user_id === user.id && (
-                          <button
-                            type="button"
-                            aria-label={t("Pindahkan ke sampah")}
-                            onClick={(e) => {
-                              e.stopPropagation()
+                        <button
+                          type="button"
+                          aria-label={note.user_id === user.id ? t("Pindahkan ke sampah") : t("Hapus dari beranda")}
+                          title={note.user_id === user.id ? t("Buang") : t("Hapus dari beranda")}
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            if (note.user_id === user.id) {
                               handleTrashToggle(note, true)
-                            }}
-                            className="text-[12px] text-[#0066cc] hover:underline active:scale-95"
-                          >
-                            {t("Buang")}
-                          </button>
-                        )}
+                            } else {
+                              if (window.confirm(t('Hapus catatan ini dari daftar Anda dan keluar dari kolaborasi?'))) {
+                                setNotes((current) => current.filter((item) => item.id !== note.id))
+                                try {
+                                  const { data: { session } } = await supabase.auth.getSession()
+                                  if (session?.access_token) {
+                                    await fetch(`/api/notices?note_id=${note.id}`, {
+                                      method: 'DELETE',
+                                      headers: { Authorization: `Bearer ${session.access_token}` },
+                                    })
+                                  }
+                                  await supabase.from('note_members').delete().eq('note_id', note.id).eq('user_id', user.id)
+                                  await reloadNotes()
+                                } catch (err) {
+                                  console.error(err)
+                                }
+                              }
+                            }
+                          }}
+                          className="flex h-7 w-7 items-center justify-center rounded-full text-[#7a7a7a] hover:bg-black/5 hover:text-[#ff3b30] active:scale-95 transition-all"
+                        >
+                          <HiOutlineTrash className="h-4 w-4" aria-hidden="true" />
+                        </button>
                       </div>
                     </div>
                   </article>

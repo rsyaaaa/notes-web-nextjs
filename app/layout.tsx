@@ -20,8 +20,13 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: " Notes — Ruang tenang untuk semua idemu",
+  title: "Notes Web Online",
   description: "Aplikasi catatan modern dengan Apple Design System dan Supabase.",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

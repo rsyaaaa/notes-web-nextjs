@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F7F6F2" />
+    </linearGradient>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFD60A" />
+      <stop offset="100%" stop-color="#FF9F0A" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+  <!-- Card base -->
+  <rect x="4" y="4" width="40" height="40" rx="9" fill="url(#bgGrad)" stroke="#E5E5EA" stroke-width="1" filter="url(#shadow)" />
+  <!-- Yellow top binding header -->
+  <path d="M 4 13 C 4 8.5 7.5 4 13 4 L 35 4 C 40.5 4 44 8.5 44 13 L 44 14 L 4 14 Z" fill="url(#headerGrad)" />
+  <!-- Notebook lines -->
+  <line x1="10" y1="21" x2="38" y2="21" stroke="#D1D1D6" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="10" y1="27" x2="38" y2="27" stroke="#E5E5EA" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="10" y1="33" x2="38" y2="33" stroke="#E5E5EA" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="10" y1="39" x2="26" y2="39" stroke="#E5E5EA" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Pen accent in amber -->
+  <circle cx="34" cy="36" r="3.5" fill="#FF9F0A" />
+  <path d="M 33 34 L 35 34 L 36 38 L 32 38 Z" fill="#FFFFFF" />
+</svg>
+
